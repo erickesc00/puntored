@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OPERATOR
+  SUPERVISOR
+}
+
+enum ReferenceStatus {
+  PENDING
+  PAID
+  CANCELLED
+  EXPIRED
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  PROVIDER
+}
+
+model User {
+  id           String             @id @default(cuid()) @db.VarChar(191)
+  username     String             @unique(map: "uq_users_username") @db.VarChar(100)
+  email        String?            @unique(map: "uq_users_email") @db.VarChar(191)
+  passwordHash String             @map("password_hash") @db.VarChar(255)
+  role         UserRole
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  sessions     Session[]
+  references   PaymentReference[]
+  idempotency  IdempotencyKey[]
+
+  @@map("users")
+}
+
+model Session {
+  id                String   @id @db.VarChar(191)
+  userId            String   @map("user_id") @db.VarChar(191)
+  ipAddress         String?  @map("ip_address") @db.VarChar(64)
+  userAgent         String?  @map("user_agent") @db.VarChar(255)
+  createdAt         DateTime @default(now()) @map("created_at")
+  lastSeenAt        DateTime @default(now()) @map("last_seen_at")
+  expiresAt         DateTime @map("expires_at")
+  absoluteExpiresAt DateTime @map("absolute_expires_at")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt], map: "idx_sessions_user_expires")
+  @@index([expiresAt], map: "idx_sessions_expires")
+  @@map("sessions")
+}
+
+model PaymentReference {
+  id                String           @id @default(cuid()) @db.VarChar(191)
+  externalReference String?          @unique(map: "uq_payment_references_external_reference") @map("external_reference") @db.VarChar(30)
+  concept           String           @db.VarChar(255)
+  amount            BigInt
+  currency          String           @db.Char(3)
+  dueAt             DateTime         @map("due_at")
+  status            ReferenceStatus  @default(PENDING)
+  version           Int              @default(1)
+  createdBy         String           @map("created_by") @db.VarChar(191)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  creator           User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  auditEvents       AuditEvent[]
+  idempotencyKeys   IdempotencyKey[]
+
+  @@index([status, createdAt, id], map: "idx_payment_references_status_created_id")
+  @@index([dueAt, status], map: "idx_payment_references_due_status")
+  @@index([createdAt, id], map: "idx_payment_references_created_id")
+  @@map("payment_references")
+}
+
+model IdempotencyKey {
+  id             String            @id @default(cuid()) @db.VarChar(191)
+  scope          String            @db.VarChar(64)
+  actorId        String            @map("actor_id") @db.VarChar(191)
+  idempotencyKey String            @map("idempotency_key") @db.VarChar(191)
+  requestHash    String            @map("request_hash") @db.Char(64)
+  referenceId    String?           @map("reference_id") @db.VarChar(191)
+  responseCode   Int               @map("response_code")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  expiresAt      DateTime          @map("expires_at")
+  actor          User              @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  reference      PaymentReference? @relation(fields: [referenceId], references: [id], onDelete: SetNull)
+
+  @@unique([scope, actorId, idempotencyKey], map: "uq_idempotency_scope_actor_key")
+  @@index([expiresAt], map: "idx_idempotency_keys_expires")
+  @@map("idempotency_keys")
+}
+
+model AuditEvent {
+  id            String            @id @default(cuid()) @db.VarChar(191)
+  referenceId   String?           @map("reference_id") @db.VarChar(191)
+  actorType     AuditActorType    @map("actor_type")
+  actorId       String?           @map("actor_id") @db.VarChar(191)
+  action        String            @db.VarChar(100)
+  result        String            @db.VarChar(100)
+  correlationId String?           @map("correlation_id") @db.VarChar(191)
+  metadataJson  Json?             @map("metadata_json")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  reference     PaymentReference? @relation(fields: [referenceId], references: [id], onDelete: SetNull)
+
+  @@index([referenceId, createdAt], map: "idx_audit_events_reference_created")
+  @@index([createdAt, id], map: "idx_audit_events_created_id")
+  @@map("audit_events")
+}
