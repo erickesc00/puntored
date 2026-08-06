@@ -8,7 +8,7 @@ services:
       MYSQL_USER: puntored
       MYSQL_PASSWORD: puntored
     ports:
-      - '3306:3306'
+      - '33060:3306'
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -23,6 +23,8 @@ services:
     command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run prisma:seed && npm run start:dev"
     env_file:
       - .env
+    environment:
+      DATABASE_URL: mysql://puntored:puntored@mysql:3306/puntored
     ports:
       - '3000:3000'
     volumes:
