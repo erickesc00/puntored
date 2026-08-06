@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ProtectedRouteGate,
   SessionProvider,
+  useSession,
 } from './session-provider';
 
 const replaceMock = vi.fn();
@@ -19,14 +20,39 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => useSearchParamsMock(),
 }));
 
-const jsonResponse = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), {
+const jsonResponse = (status: number, body?: unknown) =>
+  new Response(status === 204 ? null : JSON.stringify(body), {
     status,
-    headers: {
-      'content-type': 'application/json',
-    },
+    headers: status === 204
+      ? undefined
+      : {
+          'content-type': 'application/json',
+        },
     statusText: status >= 400 ? 'Request failed' : 'OK',
   });
+
+function SessionActionsHarness() {
+  const { login, status, user } = useSession();
+
+  return (
+    <div>
+      <button
+        onClick={() =>
+          void login({
+            username: 'operator',
+            password: 'secret-123',
+            returnTo: '/references',
+          })
+        }
+        type="button"
+      >
+        Trigger login
+      </button>
+      <span data-testid="session-status">{status}</span>
+      <span data-testid="session-username">{user?.username ?? 'anonymous'}</span>
+    </div>
+  );
+}
 
 describe('ProtectedRouteGate', () => {
   beforeEach(() => {
@@ -66,6 +92,58 @@ describe('ProtectedRouteGate', () => {
       credentials: 'include',
       method: 'GET',
     }));
+  });
+
+  it('logs in successfully and redirects to /references after /auth/me bootstrap', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse(201, {}))
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          user: {
+            id: 'u-1',
+            username: 'operator',
+            role: 'operator',
+          },
+        }),
+      );
+
+    const user = userEvent.setup();
+
+    render(
+      <SessionProvider>
+        <SessionActionsHarness />
+      </SessionProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Trigger login' }));
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith('/references');
+    });
+
+    expect(screen.getByTestId('session-status')).toHaveTextContent(
+      'authenticated',
+    );
+    expect(screen.getByTestId('session-username')).toHaveTextContent('operator');
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/auth/login',
+      expect.objectContaining({
+        body: JSON.stringify({ username: 'operator', password: 'secret-123' }),
+        cache: 'no-store',
+        credentials: 'include',
+        method: 'POST',
+      }),
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/auth/me',
+      expect.objectContaining({
+        cache: 'no-store',
+        credentials: 'include',
+        method: 'GET',
+      }),
+    );
   });
 
   it.each([
@@ -137,5 +215,50 @@ describe('ProtectedRouteGate', () => {
     });
 
     expect(await screen.findByText('Protected workspace')).toBeInTheDocument();
+  });
+
+  it('logs out, removes protected access, and redirects to /login', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          user: {
+            id: 'u-1',
+            username: 'operator',
+            role: 'operator',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse(204));
+
+    const user = userEvent.setup();
+
+    render(
+      <SessionProvider>
+        <ProtectedRouteGate>
+          <div>Protected workspace</div>
+        </ProtectedRouteGate>
+      </SessionProvider>,
+    );
+
+    expect(await screen.findByText('Protected workspace')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith('/login');
+    });
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/auth/logout',
+      expect.objectContaining({
+        cache: 'no-store',
+        credentials: 'include',
+        method: 'POST',
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByText('Protected workspace')).not.toBeInTheDocument();
+    });
   });
 });
