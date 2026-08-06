@@ -104,17 +104,19 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     const operatorCookie = await createSessionCookie(operatorUser.id);
     const payload = buildCreatePayload();
 
+    const idempotencyKey = `same-key-replay-${randomUUID()}`;
+
     const firstResponse = await request(getHttpServer())
       .post('/api/references')
       .set('Cookie', operatorCookie)
-      .set('Idempotency-Key', 'same-key-replay')
+      .set('Idempotency-Key', idempotencyKey)
       .send(payload)
       .expect(201);
 
     const replayResponse = await request(getHttpServer())
       .post('/api/references')
       .set('Cookie', operatorCookie)
-      .set('Idempotency-Key', 'same-key-replay')
+      .set('Idempotency-Key', idempotencyKey)
       .send(payload)
       .expect(201);
 
@@ -135,7 +137,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     expect(idempotencyRows).toHaveLength(1);
     expect(idempotencyRows[0]).toMatchObject({
       actorId: operatorUser.id,
-      idempotencyKey: 'same-key-replay',
+      idempotencyKey,
       referenceId: persistedReference.id,
       responseCode: 201,
     });
@@ -147,20 +149,21 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
 
   it('rejects the same idempotency key with a different payload and keeps a single persisted reference', async () => {
     const operatorCookie = await createSessionCookie(operatorUser.id);
+    const idempotencyKey = `same-key-conflict-${randomUUID()}`;
 
     const firstPayload = buildCreatePayload({ concept: 'Pago inicial' });
 
     const createdResponse = await request(getHttpServer())
       .post('/api/references')
       .set('Cookie', operatorCookie)
-      .set('Idempotency-Key', 'same-key-conflict')
+      .set('Idempotency-Key', idempotencyKey)
       .send(firstPayload)
       .expect(201);
 
     const conflictResponse = await request(getHttpServer())
       .post('/api/references')
       .set('Cookie', operatorCookie)
-      .set('Idempotency-Key', 'same-key-conflict')
+      .set('Idempotency-Key', idempotencyKey)
       .send(buildCreatePayload({ concept: 'Pago distinto' }))
       .expect(409);
 
@@ -382,18 +385,19 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
   it('returns detail with persisted audit history', async () => {
     const operatorCookie = await createSessionCookie(operatorUser.id);
     const payload = buildCreatePayload({ concept: 'History check reference' });
+    const idempotencyKey = `detail-history-key-${randomUUID()}`;
 
     const createdResponse = await request(getHttpServer())
       .post('/api/references')
       .set('Cookie', operatorCookie)
-      .set('Idempotency-Key', 'detail-history-key')
+      .set('Idempotency-Key', idempotencyKey)
       .send(payload)
       .expect(201);
 
     await request(getHttpServer())
       .post('/api/references')
       .set('Cookie', operatorCookie)
-      .set('Idempotency-Key', 'detail-history-key')
+      .set('Idempotency-Key', idempotencyKey)
       .send(payload)
       .expect(201);
 
@@ -420,11 +424,12 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
   it('cancels a persisted pending reference as supervisor and increments version', async () => {
     const operatorCookie = await createSessionCookie(operatorUser.id);
     const supervisorCookie = await createSessionCookie(supervisorUser.id);
+    const idempotencyKey = `cancel-success-key-${randomUUID()}`;
 
     const createdResponse = await request(getHttpServer())
       .post('/api/references')
       .set('Cookie', operatorCookie)
-      .set('Idempotency-Key', 'cancel-success-key')
+      .set('Idempotency-Key', idempotencyKey)
       .send(buildCreatePayload({ concept: 'Cancelable reference' }))
       .expect(201);
 
@@ -457,8 +462,60 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     ]);
   });
 
-  it('returns a conflict for stale cancel version and leaves persisted state untouched', async () => {
+  it('rejects cancelling an already cancelled reference and persists the rejection audit trail', async () => {
+    const operatorCookie = await createSessionCookie(operatorUser.id);
     const supervisorCookie = await createSessionCookie(supervisorUser.id);
+    const idempotencyKey = `cancel-terminal-key-${randomUUID()}`;
+
+    const createdResponse = await request(getHttpServer())
+      .post('/api/references')
+      .set('Cookie', operatorCookie)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(buildCreatePayload({ concept: 'Already cancelled reference' }))
+      .expect(201);
+
+    await request(getHttpServer())
+      .post(`/api/references/${createdResponse.body.id as string}/cancel`)
+      .set('Cookie', supervisorCookie)
+      .send({ version: 1 })
+      .expect(201);
+
+    const secondCancelResponse = await request(getHttpServer())
+      .post(`/api/references/${createdResponse.body.id as string}/cancel`)
+      .set('Cookie', supervisorCookie)
+      .send({ version: 2 })
+      .expect(409);
+
+    expect(secondCancelResponse.body.code).toBe('INVALID_REFERENCE_STATE');
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: createdResponse.body.id as string },
+    });
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: persistedReference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.CANCELLED);
+    expect(persistedReference.version).toBe(2);
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'CREATE_REFERENCE:SUCCESS',
+      'CANCEL_ATTEMPT:STARTED',
+      'CANCEL_REFERENCE:SUCCESS',
+      'CANCEL_ATTEMPT:STARTED',
+      'CANCEL_REFERENCE:REJECTED_INVALID_STATUS',
+    ]);
+    expect(auditRows[4]?.metadataJson).toMatchObject({
+      expectedVersion: 2,
+      currentVersion: 2,
+      currentStatus: ReferenceStatus.CANCELLED,
+    });
+  });
+
+  it('returns a conflict for stale cancel version and leaves persisted state untouched', async () => {
+    const supervisorCookie = await createSessionCookie(
+      (await getSeedUsers(prisma)).supervisor.id,
+    );
 
     const reference = await createPersistedReference({
       concept: 'Stale version reference',
@@ -489,7 +546,10 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
 
     expect(persistedReference.status).toBe(ReferenceStatus.PENDING);
     expect(persistedReference.version).toBe(2);
-    expect(auditRows).toHaveLength(0);
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'CANCEL_ATTEMPT:STARTED',
+      'CANCEL_REFERENCE:REJECTED_VERSION_CONFLICT',
+    ]);
   });
 
   it('forbids cancel for operator and preserves persisted state', async () => {

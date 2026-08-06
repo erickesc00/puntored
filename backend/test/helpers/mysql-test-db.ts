@@ -5,14 +5,15 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import mysql from 'mysql2/promise';
 
 const backendRoot = resolve(__dirname, '..', '..');
+const TEST_DATABASE_NAME = `puntored_test_${process.pid}`;
 
-export const TEST_DATABASE_URL_DEFAULT =
-  'mysql://puntored:puntored@127.0.0.1:33060/puntored_test';
+export const TEST_DATABASE_URL_DEFAULT = `mysql://puntored:puntored@127.0.0.1:33060/${TEST_DATABASE_NAME}`;
 export const TEST_DATABASE_ADMIN_URL_DEFAULT =
   'mysql://root:root@127.0.0.1:33060/mysql';
 export const TEST_PASSWORD = 'Puntored123!';
 
 let databasePrepared = false;
+let preparedDatabaseUrl: string | null = null;
 
 function getTestDatabaseUrl() {
   return process.env.TEST_DATABASE_URL ?? TEST_DATABASE_URL_DEFAULT;
@@ -117,7 +118,9 @@ export function applyTestEnvironment() {
 export async function ensureTestDatabaseReady() {
   applyTestEnvironment();
 
-  if (databasePrepared) {
+  const databaseUrl = getTestDatabaseUrl();
+
+  if (databasePrepared && preparedDatabaseUrl === databaseUrl) {
     return;
   }
 
@@ -134,6 +137,7 @@ export async function ensureTestDatabaseReady() {
   }
 
   databasePrepared = true;
+  preparedDatabaseUrl = databaseUrl;
 }
 
 export async function seedBaseUsers(prisma: PrismaClient) {
@@ -175,10 +179,19 @@ export async function seedBaseUsers(prisma: PrismaClient) {
 }
 
 export async function resetTestDatabase(prisma: PrismaClient) {
-  await prisma.auditEvent.deleteMany();
-  await prisma.idempotencyKey.deleteMany();
-  await prisma.paymentReference.deleteMany();
-  await prisma.session.deleteMany();
+  const connection = await mysql.createConnection(getTestDatabaseUrl());
+
+  try {
+    await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+    await connection.query('TRUNCATE TABLE `audit_events`');
+    await connection.query('TRUNCATE TABLE `idempotency_keys`');
+    await connection.query('TRUNCATE TABLE `payment_references`');
+    await connection.query('TRUNCATE TABLE `sessions`');
+    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+  } finally {
+    await connection.end();
+  }
+
   await seedBaseUsers(prisma);
 }
 

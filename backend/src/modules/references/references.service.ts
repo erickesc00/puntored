@@ -279,106 +279,106 @@ export class ReferencesService {
     actor: SessionAuth,
     correlationId?: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      const reference = await tx.paymentReference.findUnique({
-        where: { id },
-        include: {
-          creator: {
-            select: {
-              id: true,
-              username: true,
-              role: true,
-            },
+    const reference = await this.prisma.paymentReference.findUnique({
+      where: { id },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            username: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!reference) {
+      await this.prisma.auditEvent.create({
+        data: {
+          actorType: 'USER',
+          actorId: actor.userId,
+          action: 'CANCEL_ATTEMPT',
+          result: 'REJECTED_NOT_FOUND',
+          correlationId,
+          metadataJson: {
+            referenceId: id,
+            expectedVersion: payload.version,
           },
         },
       });
 
-      if (!reference) {
-        await tx.auditEvent.create({
-          data: {
-            actorType: 'USER',
-            actorId: actor.userId,
-            action: 'CANCEL_ATTEMPT',
-            result: 'REJECTED_NOT_FOUND',
-            correlationId,
-            metadataJson: {
-              referenceId: id,
-              expectedVersion: payload.version,
-            },
-          },
-        });
+      throw new NotFoundException({
+        code: 'REFERENCE_NOT_FOUND',
+        message: 'Reference not found',
+      });
+    }
 
-        throw new NotFoundException({
-          code: 'REFERENCE_NOT_FOUND',
-          message: 'Reference not found',
-        });
-      }
+    await this.prisma.auditEvent.create({
+      data: {
+        referenceId: reference.id,
+        actorType: 'USER',
+        actorId: actor.userId,
+        action: 'CANCEL_ATTEMPT',
+        result: 'STARTED',
+        correlationId,
+        metadataJson: {
+          expectedVersion: payload.version,
+          currentVersion: reference.version,
+        },
+      },
+    });
 
-      await tx.auditEvent.create({
+    const eligibility = evaluateCancellationEligibility({
+      currentStatus: reference.status,
+      dueAt: reference.dueAt,
+      currentVersion: reference.version,
+      expectedVersion: payload.version,
+    });
+
+    if (!eligibility.allowed) {
+      const result =
+        eligibility.reason === 'VERSION_MISMATCH'
+          ? 'REJECTED_VERSION_CONFLICT'
+          : eligibility.reason === 'REFERENCE_EXPIRED'
+            ? 'REJECTED_EXPIRED'
+            : 'REJECTED_INVALID_STATUS';
+
+      await this.prisma.auditEvent.create({
         data: {
           referenceId: reference.id,
           actorType: 'USER',
           actorId: actor.userId,
-          action: 'CANCEL_ATTEMPT',
-          result: 'STARTED',
+          action: 'CANCEL_REFERENCE',
+          result,
           correlationId,
           metadataJson: {
             expectedVersion: payload.version,
             currentVersion: reference.version,
+            currentStatus: eligibility.effectiveStatus,
           },
         },
       });
 
-      const eligibility = evaluateCancellationEligibility({
-        currentStatus: reference.status,
-        dueAt: reference.dueAt,
-        currentVersion: reference.version,
-        expectedVersion: payload.version,
-      });
-
-      if (!eligibility.allowed) {
-        const result =
-          eligibility.reason === 'VERSION_MISMATCH'
-            ? 'REJECTED_VERSION_CONFLICT'
-            : eligibility.reason === 'REFERENCE_EXPIRED'
-              ? 'REJECTED_EXPIRED'
-              : 'REJECTED_INVALID_STATUS';
-
-        await tx.auditEvent.create({
-          data: {
-            referenceId: reference.id,
-            actorType: 'USER',
-            actorId: actor.userId,
-            action: 'CANCEL_REFERENCE',
-            result,
-            correlationId,
-            metadataJson: {
-              expectedVersion: payload.version,
-              currentVersion: reference.version,
-              currentStatus: eligibility.effectiveStatus,
-            },
-          },
-        });
-
-        if (eligibility.reason === 'VERSION_MISMATCH') {
-          throw new ConflictException({
-            code: 'REFERENCE_VERSION_CONFLICT',
-            message: 'Reference version conflict',
-          });
-        }
-
+      if (eligibility.reason === 'VERSION_MISMATCH') {
         throw new ConflictException({
-          code:
-            eligibility.reason === 'REFERENCE_EXPIRED'
-              ? 'REFERENCE_EXPIRED'
-              : 'INVALID_REFERENCE_STATE',
-          message:
-            eligibility.reason === 'REFERENCE_EXPIRED'
-              ? 'Expired references cannot be cancelled'
-              : 'Reference cannot be cancelled from the current state',
+          code: 'REFERENCE_VERSION_CONFLICT',
+          message: 'Reference version conflict',
         });
       }
 
+      throw new ConflictException({
+        code:
+          eligibility.reason === 'REFERENCE_EXPIRED'
+            ? 'REFERENCE_EXPIRED'
+            : 'INVALID_REFERENCE_STATE',
+        message:
+          eligibility.reason === 'REFERENCE_EXPIRED'
+            ? 'Expired references cannot be cancelled'
+            : 'Reference cannot be cancelled from the current state',
+      });
+    }
+
+    const cancellationResult = await this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.paymentReference.updateMany({
         where: {
           id: reference.id,
@@ -394,25 +394,7 @@ export class ReferencesService {
       });
 
       if (updateResult.count === 0) {
-        await tx.auditEvent.create({
-          data: {
-            referenceId: reference.id,
-            actorType: 'USER',
-            actorId: actor.userId,
-            action: 'CANCEL_REFERENCE',
-            result: 'REJECTED_VERSION_CONFLICT',
-            correlationId,
-            metadataJson: {
-              expectedVersion: payload.version,
-              currentVersion: reference.version,
-            },
-          },
-        });
-
-        throw new ConflictException({
-          code: 'REFERENCE_VERSION_CONFLICT',
-          message: 'Reference version conflict',
-        });
+        return null;
       }
 
       const cancelledReference = await tx.paymentReference.findUnique({
@@ -450,8 +432,47 @@ export class ReferencesService {
         },
       });
 
-      return this.serializeReference(cancelledReference);
+      return cancelledReference;
     });
+
+    if (!cancellationResult) {
+      const persistedReference = await this.prisma.paymentReference.findUnique({
+        where: { id: reference.id },
+        select: {
+          version: true,
+          status: true,
+          dueAt: true,
+        },
+      });
+
+      await this.prisma.auditEvent.create({
+        data: {
+          referenceId: reference.id,
+          actorType: 'USER',
+          actorId: actor.userId,
+          action: 'CANCEL_REFERENCE',
+          result: 'REJECTED_VERSION_CONFLICT',
+          correlationId,
+          metadataJson: {
+            expectedVersion: payload.version,
+            currentVersion: persistedReference?.version ?? reference.version,
+            currentStatus: persistedReference
+              ? getEffectiveReferenceStatus(
+                  persistedReference.status,
+                  persistedReference.dueAt,
+                )
+              : reference.status,
+          },
+        },
+      });
+
+      throw new ConflictException({
+        code: 'REFERENCE_VERSION_CONFLICT',
+        message: 'Reference version conflict',
+      });
+    }
+
+    return this.serializeReference(cancellationResult);
   }
 
   private async resolveExistingIdempotentRequest(
