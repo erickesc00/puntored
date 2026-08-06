@@ -1,0 +1,344 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+
+import { INestApplication } from '@nestjs/common';
+import { ReferenceStatus } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import request from 'supertest';
+import { PrismaService } from '../src/common/prisma/prisma.service';
+import { createRealTestApp } from './helpers/create-real-test-app';
+import { getSeedUsers, resetTestDatabase } from './helpers/mysql-test-db';
+
+describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let operatorUser: Awaited<ReturnType<typeof getSeedUsers>>['operator'];
+  let supervisorUser: Awaited<ReturnType<typeof getSeedUsers>>['supervisor'];
+
+  beforeAll(async () => {
+    const realApp = await createRealTestApp();
+    app = realApp.app;
+    prisma = realApp.prisma;
+  });
+
+  beforeEach(async () => {
+    await resetTestDatabase(prisma);
+
+    const seededUsers = await getSeedUsers(prisma);
+    operatorUser = seededUsers.operator;
+    supervisorUser = seededUsers.supervisor;
+  });
+
+  afterAll(async () => {
+    if (app) {
+      await app.close();
+    }
+  });
+
+  const getHttpServer = () =>
+    app.getHttpServer() as Parameters<typeof request>[0];
+
+  const createSessionCookie = async (userId: string) => {
+    const sessionId = randomUUID();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 30 * 60 * 1000);
+    const absoluteExpiresAt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+
+    await prisma.session.create({
+      data: {
+        id: sessionId,
+        userId,
+        expiresAt,
+        absoluteExpiresAt,
+        lastSeenAt: now,
+      },
+    });
+
+    return `puntored.sid=${sessionId}`;
+  };
+
+  const createPersistedReference = async (overrides?: {
+    dueAt?: Date;
+    status?: ReferenceStatus;
+    version?: number;
+    externalReference?: string | null;
+  }) => {
+    return prisma.paymentReference.create({
+      data: {
+        concept: 'Provider fixture reference',
+        amount: BigInt(125000),
+        currency: 'COP',
+        dueAt: overrides?.dueAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
+        status: overrides?.status ?? ReferenceStatus.PENDING,
+        version: overrides?.version ?? 1,
+        createdBy: operatorUser.id,
+        externalReference:
+          overrides?.externalReference === undefined
+            ? null
+            : overrides.externalReference,
+      },
+    });
+  };
+
+  const providerPayload = (
+    referenceId: string,
+    overrides?: Partial<Record<string, unknown>>,
+  ) => ({
+    providerEventId: `provider-event-${randomUUID()}`,
+    referenceId,
+    externalReference: `EXT-${randomUUID().slice(0, 8)}`,
+    status: 'PAID',
+    paidAt: new Date().toISOString(),
+    ...overrides,
+  });
+
+  const providerSecret =
+    process.env.PROVIDER_SHARED_SECRET ?? 'test-provider-secret-1234';
+
+  it('rejects provider callbacks without the shared secret', async () => {
+    const reference = await createPersistedReference();
+
+    const response = await request(getHttpServer())
+      .post('/api/provider/events')
+      .send(providerPayload(reference.id))
+      .expect(401);
+
+    expect(response.body.code).toBe('PROVIDER_UNAUTHORIZED');
+  });
+
+  it('marks a pending reference as paid, persists provider idempotency evidence, and exposes provider metrics', async () => {
+    const reference = await createPersistedReference();
+    const payload = providerPayload(reference.id, {
+      externalReference: 'EXT-PAID-001',
+    });
+
+    const response = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      providerEventId: payload.providerEventId,
+      outcome: 'SUCCESS',
+      duplicate: false,
+      reference: {
+        id: reference.id,
+        status: ReferenceStatus.PAID,
+        version: 2,
+        externalReference: 'EXT-PAID-001',
+      },
+    });
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    const providerEvents = await prisma.providerEvent.findMany();
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: reference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.PAID);
+    expect(persistedReference.version).toBe(2);
+    expect(persistedReference.externalReference).toBe('EXT-PAID-001');
+    expect(providerEvents).toHaveLength(1);
+    expect(providerEvents[0]).toMatchObject({
+      providerEventId: payload.providerEventId,
+      referenceId: reference.id,
+      outcome: 'SUCCESS',
+      eventType: 'PAID',
+    });
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'PROVIDER_EVENT:SUCCESS',
+    ]);
+
+    const metricsResponse = await request(getHttpServer())
+      .get('/api/metrics')
+      .expect(200);
+
+    expect(metricsResponse.text).toContain('puntored_provider_events_total');
+    expect(metricsResponse.text).toContain('outcome="SUCCESS"');
+  });
+
+  it('suppresses duplicate provider events and returns a repeat-safe response', async () => {
+    const reference = await createPersistedReference();
+    const payload = providerPayload(reference.id, {
+      externalReference: 'EXT-DUPLICATE-001',
+    });
+
+    await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    const duplicateResponse = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    expect(duplicateResponse.body).toMatchObject({
+      providerEventId: payload.providerEventId,
+      outcome: 'DUPLICATE',
+      duplicate: true,
+      reference: {
+        id: reference.id,
+        status: ReferenceStatus.PAID,
+      },
+    });
+
+    const providerEvents = await prisma.providerEvent.findMany();
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: reference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(providerEvents).toHaveLength(1);
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'PROVIDER_EVENT:SUCCESS',
+      'PROVIDER_EVENT_REPLAY:DUPLICATE',
+    ]);
+  });
+
+  it('rejects a late paid event after local cancellation and preserves audit evidence', async () => {
+    const supervisorCookie = await createSessionCookie(supervisorUser.id);
+    const reference = await createPersistedReference();
+
+    await request(getHttpServer())
+      .post(`/api/references/${reference.id}/cancel`)
+      .set('Cookie', supervisorCookie)
+      .send({ version: 1 })
+      .expect(201);
+
+    const payload = providerPayload(reference.id, {
+      externalReference: 'EXT-LATE-PAID-001',
+    });
+
+    const conflictResponse = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(409);
+
+    expect(conflictResponse.body.code).toBe('PROVIDER_EVENT_CONFLICT');
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    const providerEvents = await prisma.providerEvent.findMany();
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: reference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.CANCELLED);
+    expect(persistedReference.version).toBe(2);
+    expect(providerEvents).toHaveLength(1);
+    expect(providerEvents[0]).toMatchObject({
+      providerEventId: payload.providerEventId,
+      referenceId: reference.id,
+      outcome: 'REJECTED_TERMINAL_STATE',
+    });
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'CANCEL_ATTEMPT:STARTED',
+      'CANCEL_REFERENCE:SUCCESS',
+      'PROVIDER_EVENT:REJECTED_TERMINAL_STATE',
+    ]);
+  });
+
+  it('keeps cancel-versus-paid races valid and auditable', async () => {
+    const supervisorCookie = await createSessionCookie(supervisorUser.id);
+    const reference = await createPersistedReference();
+    const payload = providerPayload(reference.id, {
+      externalReference: 'EXT-RACE-PAID-001',
+    });
+
+    const [providerResult, cancelResult] = await Promise.allSettled([
+      request(getHttpServer())
+        .post('/api/provider/events')
+        .set('x-provider-secret', providerSecret)
+        .send(payload),
+      request(getHttpServer())
+        .post(`/api/references/${reference.id}/cancel`)
+        .set('Cookie', supervisorCookie)
+        .send({ version: 1 }),
+    ]);
+
+    expect(providerResult.status).toBe('fulfilled');
+    expect(cancelResult.status).toBe('fulfilled');
+
+    if (
+      providerResult.status !== 'fulfilled' ||
+      cancelResult.status !== 'fulfilled'
+    ) {
+      throw new Error(
+        'Expected both competing requests to produce HTTP responses',
+      );
+    }
+
+    const responseStatuses = [
+      providerResult.value.status,
+      cancelResult.value.status,
+    ];
+    expect(responseStatuses).toContain(409);
+    expect(
+      responseStatuses.some((status) => status === 200 || status === 201),
+    ).toBe(true);
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    const providerEvents = await prisma.providerEvent.findMany();
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: reference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect([ReferenceStatus.PAID, ReferenceStatus.CANCELLED]).toContain(
+      persistedReference.status,
+    );
+    expect(persistedReference.version).toBe(2);
+    expect(providerEvents).toHaveLength(1);
+    expect(auditRows.length).toBeGreaterThanOrEqual(2);
+
+    if (persistedReference.status === ReferenceStatus.PAID) {
+      expect(providerResult.value.status).toBe(200);
+      expect(cancelResult.value.status).toBe(409);
+      expect(providerEvents[0]?.outcome).toMatch(
+        /SUCCESS|ACCEPTED_ALREADY_PAID/,
+      );
+      expect(
+        auditRows.some(
+          (row) =>
+            row.action === 'PROVIDER_EVENT' &&
+            ['SUCCESS', 'ACCEPTED_ALREADY_PAID'].includes(row.result),
+        ),
+      ).toBe(true);
+      expect(
+        auditRows.some(
+          (row) =>
+            row.action === 'CANCEL_REFERENCE' &&
+            row.result === 'REJECTED_VERSION_CONFLICT',
+        ),
+      ).toBe(true);
+    } else {
+      expect(providerResult.value.status).toBe(409);
+      expect(cancelResult.value.status).toBe(201);
+      expect(providerEvents[0]?.outcome).toBe('REJECTED_TERMINAL_STATE');
+      expect(
+        auditRows.some(
+          (row) =>
+            row.action === 'CANCEL_REFERENCE' && row.result === 'SUCCESS',
+        ),
+      ).toBe(true);
+      expect(
+        auditRows.some(
+          (row) =>
+            row.action === 'PROVIDER_EVENT' &&
+            row.result === 'REJECTED_TERMINAL_STATE',
+        ),
+      ).toBe(true);
+    }
+  });
+});

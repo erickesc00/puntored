@@ -10,6 +10,7 @@ import { MetricsModule } from './common/metrics/metrics.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { ProviderEventsModule } from './modules/provider-events/provider-events.module';
 import { ReferencesModule } from './modules/references/references.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { ReferencesModule } from './modules/references/references.module';
     MetricsModule,
     AuthModule,
     HealthModule,
+    ProviderEventsModule,
     ReferencesModule,
   ],
   providers: [

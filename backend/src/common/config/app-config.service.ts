@@ -67,4 +67,15 @@ export class AppConfigService {
       }),
     };
   }
+
+  get provider() {
+    return {
+      sharedSecret: this.configService.get('PROVIDER_SHARED_SECRET', {
+        infer: true,
+      }),
+      actorId: this.configService.get('PROVIDER_ACTOR_ID', {
+        infer: true,
+      }),
+    };
+  }
 }

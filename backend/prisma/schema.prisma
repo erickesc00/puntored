@@ -72,11 +72,28 @@ model PaymentReference {
   creator           User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   auditEvents       AuditEvent[]
   idempotencyKeys   IdempotencyKey[]
+  providerEvents    ProviderEvent[]
 
   @@index([status, createdAt, id], map: "idx_payment_references_status_created_id")
   @@index([dueAt, status], map: "idx_payment_references_due_status")
   @@index([createdAt, id], map: "idx_payment_references_created_id")
   @@map("payment_references")
+}
+
+model ProviderEvent {
+  id                String            @id @default(cuid()) @db.VarChar(191)
+  providerEventId   String            @unique(map: "uq_provider_events_provider_event_id") @map("provider_event_id") @db.VarChar(191)
+  referenceId       String?           @map("reference_id") @db.VarChar(191)
+  externalReference String?           @map("external_reference") @db.VarChar(30)
+  payloadHash       String            @map("payload_hash") @db.Char(64)
+  eventType         String            @map("event_type") @db.VarChar(50)
+  outcome           String            @db.VarChar(100)
+  processedAt       DateTime          @default(now()) @map("processed_at")
+  reference         PaymentReference? @relation(fields: [referenceId], references: [id], onDelete: SetNull)
+
+  @@index([referenceId, processedAt], map: "idx_provider_events_reference_processed")
+  @@index([processedAt], map: "idx_provider_events_processed")
+  @@map("provider_events")
 }
 
 model IdempotencyKey {

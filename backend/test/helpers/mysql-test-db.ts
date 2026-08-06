@@ -113,6 +113,10 @@ export function applyTestEnvironment() {
   process.env.COOKIE_SECURE = process.env.COOKIE_SECURE ?? 'false';
   process.env.LOGIN_RATE_LIMIT_LIMIT =
     process.env.LOGIN_RATE_LIMIT_LIMIT ?? '1000';
+  process.env.PROVIDER_SHARED_SECRET =
+    process.env.PROVIDER_SHARED_SECRET ?? 'test-provider-secret-1234';
+  process.env.PROVIDER_ACTOR_ID =
+    process.env.PROVIDER_ACTOR_ID ?? 'provider:test';
 }
 
 export async function ensureTestDatabaseReady() {
@@ -185,6 +189,7 @@ export async function resetTestDatabase(prisma: PrismaClient) {
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
     await connection.query('TRUNCATE TABLE `audit_events`');
     await connection.query('TRUNCATE TABLE `idempotency_keys`');
+    await connection.query('TRUNCATE TABLE `provider_events`');
     await connection.query('TRUNCATE TABLE `payment_references`');
     await connection.query('TRUNCATE TABLE `sessions`');
     await connection.query('SET FOREIGN_KEY_CHECKS = 1');

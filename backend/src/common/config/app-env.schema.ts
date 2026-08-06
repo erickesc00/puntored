@@ -32,6 +32,11 @@ export const appEnvSchema = z.object({
   BCRYPT_ROUNDS: toNumber(10),
   LOGIN_RATE_LIMIT_TTL_SECONDS: toNumber(60),
   LOGIN_RATE_LIMIT_LIMIT: toNumber(5),
+  PROVIDER_SHARED_SECRET: z
+    .string()
+    .min(16)
+    .default('change-this-provider-secret'),
+  PROVIDER_ACTOR_ID: z.string().default('provider:puntored'),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

@@ -39,6 +39,13 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  private readonly providerEvents = new Counter({
+    name: 'puntored_provider_events_total',
+    help: 'Provider callback events handled by outcome',
+    labelNames: ['event_type', 'outcome'],
+    registers: [this.registry],
+  });
+
   constructor() {
     this.registry.setDefaultLabels({ service: 'puntored-backend' });
     collectDefaultMetrics({ register: this.registry, prefix: 'puntored_' });
@@ -66,6 +73,10 @@ export class MetricsService {
 
   recordLoginAttempt(outcome: 'success' | 'failure') {
     this.authLogins.inc({ outcome });
+  }
+
+  recordProviderEvent(eventType: string, outcome: string) {
+    this.providerEvents.inc({ event_type: eventType, outcome });
   }
 
   async getMetrics() {
