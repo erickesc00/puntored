@@ -68,6 +68,7 @@ describe('AuthService', () => {
     });
     expect(result.cookie.name).toBe('puntored.sid');
     expect(result.cookie.options.httpOnly).toBe(true);
+    expect(result.cookie.options.expires).toEqual(result.session.expiresAt);
     expect(metrics.recordLoginAttempt).toHaveBeenCalledWith('success');
   });
 

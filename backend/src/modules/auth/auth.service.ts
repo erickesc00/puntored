@@ -82,14 +82,25 @@ export class AuthService {
         absoluteExpiresAt,
       },
       cookie: {
-        name: this.config.session.cookieName,
-        value: sessionId,
-        options: {
-          ...this.config.session.cookieOptions,
-          expires: expiresAt,
-        },
+        ...this.buildSessionCookie(sessionId, expiresAt),
       },
     };
+  }
+
+  buildSessionCookie(sessionId: string, expiresAt: Date) {
+    return {
+      name: this.config.session.cookieName,
+      value: sessionId,
+      options: {
+        ...this.config.session.cookieOptions,
+        expires: expiresAt,
+      },
+    };
+  }
+
+  setSessionCookie(response: Response, sessionId: string, expiresAt: Date) {
+    const cookie = this.buildSessionCookie(sessionId, expiresAt);
+    response.cookie(cookie.name, cookie.value, cookie.options);
   }
 
   async logout(sessionId: string | null) {

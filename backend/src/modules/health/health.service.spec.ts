@@ -25,4 +25,14 @@ describe('HealthService', () => {
       checks: { database: 'up' },
     });
   });
+
+  it('returns degraded when the database ping fails', async () => {
+    prisma.$queryRaw.mockRejectedValue(new Error('db down'));
+
+    await expect(service.getHealth()).resolves.toMatchObject({
+      status: 'degraded',
+      version: '0.1.0',
+      checks: { database: 'down' },
+    });
+  });
 });

@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { AuthService } from '../auth.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AppConfigService } from '../../../common/config/app-config.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
@@ -24,6 +25,7 @@ export class SessionGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
+    private readonly authService: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -37,6 +39,7 @@ export class SessionGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse<Response>();
     const sessionId = request.cookies?.[this.config.session.cookieName] as
       string | undefined;
 
@@ -53,6 +56,7 @@ export class SessionGuard implements CanActivate {
     });
 
     if (!session || !session.user.active) {
+      this.authService.clearSessionCookie(response);
       throw new UnauthorizedException({
         code: 'SESSION_REQUIRED',
         message: 'Authentication required',
@@ -62,6 +66,7 @@ export class SessionGuard implements CanActivate {
     const now = new Date();
     if (session.expiresAt <= now || session.absoluteExpiresAt <= now) {
       await this.prisma.session.deleteMany({ where: { id: session.id } });
+      this.authService.clearSessionCookie(response);
       throw new UnauthorizedException({
         code: 'SESSION_EXPIRED',
         message: 'Session expired',
@@ -83,6 +88,8 @@ export class SessionGuard implements CanActivate {
         expiresAt,
       },
     });
+
+    this.authService.setSessionCookie(response, session.id, expiresAt);
 
     request.auth = {
       userId: session.user.id,

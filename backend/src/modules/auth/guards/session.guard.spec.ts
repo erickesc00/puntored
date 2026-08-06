@@ -23,6 +23,11 @@ describe('SessionGuard', () => {
     },
   };
 
+  const authService = {
+    clearSessionCookie: jest.fn(),
+    setSessionCookie: jest.fn(),
+  };
+
   let guard: SessionGuard;
 
   beforeEach(() => {
@@ -32,7 +37,12 @@ describe('SessionGuard', () => {
       reflector as unknown as Reflector,
       prisma as never,
       config as never,
+      authService as never,
     );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('rejects expired sessions and deletes them from persistence', async () => {
@@ -53,6 +63,7 @@ describe('SessionGuard', () => {
         getRequest: () => ({
           cookies: { 'puntored.sid': 'session-1' },
         }),
+        getResponse: () => ({}),
       }),
       getHandler: jest.fn(),
       getClass: jest.fn(),
@@ -63,6 +74,60 @@ describe('SessionGuard', () => {
     );
     expect(prisma.session.deleteMany).toHaveBeenCalledWith({
       where: { id: 'session-1' },
+    });
+    expect(authService.clearSessionCookie).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the persisted session and reissues the cookie for active requests', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-05T12:00:00.000Z'));
+    prisma.session.findUnique.mockResolvedValue({
+      id: 'session-1',
+      expiresAt: new Date('2026-08-05T12:05:00.000Z'),
+      absoluteExpiresAt: new Date('2026-08-05T18:00:00.000Z'),
+      user: {
+        id: 'user-1',
+        username: 'operator',
+        role: UserRole.OPERATOR,
+        active: true,
+      },
+    });
+
+    const request = {
+      cookies: { 'puntored.sid': 'session-1' },
+    };
+    const response = {};
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => request,
+        getResponse: () => response,
+      }),
+      getHandler: jest.fn(),
+      getClass: jest.fn(),
+    } as never;
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+
+    const expectedExpiry = new Date('2026-08-05T12:30:00.000Z');
+
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        lastSeenAt: new Date('2026-08-05T12:00:00.000Z'),
+        expiresAt: expectedExpiry,
+      },
+    });
+    expect(authService.setSessionCookie).toHaveBeenCalledWith(
+      response,
+      'session-1',
+      expectedExpiry,
+    );
+    expect(request).toMatchObject({
+      auth: {
+        userId: 'user-1',
+        username: 'operator',
+        role: UserRole.OPERATOR,
+        sessionId: 'session-1',
+      },
     });
   });
 });
