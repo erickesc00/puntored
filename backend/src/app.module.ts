@@ -10,6 +10,7 @@ import { MetricsModule } from './common/metrics/metrics.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { ReferencesModule } from './modules/references/references.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { HealthModule } from './modules/health/health.module';
     MetricsModule,
     AuthModule,
     HealthModule,
+    ReferencesModule,
   ],
   providers: [
     AppConfigService,
