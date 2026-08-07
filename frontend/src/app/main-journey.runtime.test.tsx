@@ -294,16 +294,16 @@ describe('frontend runtime journey', () => {
 
     const { unmount } = render(<CreateReferenceForm />);
 
-    fireEvent.change(screen.getByLabelText('Concepto'), {
+    fireEvent.change(screen.getByLabelText(/Concepto de Recaudo/i), {
       target: { value: 'Matrícula agosto' },
     });
     fireEvent.change(screen.getByLabelText('Monto'), {
       target: { value: '1250.50' },
     });
-    fireEvent.change(screen.getByLabelText('Moneda'), {
+    fireEvent.change(screen.getByLabelText(/Moneda/i), {
       target: { value: 'COP' },
     });
-    fireEvent.change(screen.getByLabelText('Vencimiento'), {
+    fireEvent.change(screen.getByLabelText(/Fecha de Vencimiento/i), {
       target: { value: '2026-08-20T10:00' },
     });
 
@@ -352,7 +352,7 @@ describe('frontend runtime journey', () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText('Cancelada').length).toBeGreaterThan(0);
     expect(screen.getByText('CANCEL REFERENCE · SUCCESS')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Volver al listado' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Volver' })).toHaveAttribute(
       'href',
       '/references?created=ref-1',
     );

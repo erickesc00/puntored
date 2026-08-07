@@ -252,8 +252,15 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
 
   return (
     <main className="detail-page-shell stack">
+      <div className="page-back-link-row">
+        <Link className="back-link" href={returnTo}>
+          <BackIcon />
+          <span>Volver</span>
+        </Link>
+      </div>
+
       <section className="workspace-heading detail-heading">
-        <div className="stack stack-sm">
+        <div className="stack stack-sm page-heading-copy">
           <p className="eyebrow">Detalle</p>
           <h1>{reference.concept}</h1>
           <p className="workspace-copy">
@@ -261,9 +268,21 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
           </p>
         </div>
 
-        <Link className="text-link" href={returnTo}>
-          Volver al listado
-        </Link>
+        {isSupervisor ? (
+          <div className="detail-heading-actions">
+            <button
+              className="detail-inline-danger-button"
+              disabled={!canCancel || isConfirmingCancel || isCancelling}
+              onClick={() => {
+                setFeedback(null);
+                setIsConfirmingCancel(true);
+              }}
+              type="button"
+            >
+              {isCancelling ? 'Cancelando...' : 'Cancelar referencia'}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {feedback ? (
@@ -282,143 +301,125 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
         </div>
       ) : null}
 
-      <section className="card stack" aria-labelledby="reference-summary-title">
-        <div className="workspace-results-header">
-          <h2 id="reference-summary-title">Resumen actual</h2>
-          <span className={`status-pill status-${reference.status.toLowerCase()}`}>
-            {statusLabel[reference.status]}
-          </span>
+      {isSupervisor && isConfirmingCancel ? (
+        <div
+          className="confirm-panel stack"
+          role="alertdialog"
+          aria-labelledby="cancel-dialog-title"
+          aria-describedby="cancel-dialog-copy"
+        >
+          <h2 id="cancel-dialog-title">Confirmar cancelación</h2>
+          <p id="cancel-dialog-copy">
+            Vamos a cancelar la referencia usando la versión <strong>{reference.version}</strong>. Si
+            alguien cambió el estado antes, refrescaremos el detalle para mostrar la última versión
+            disponible.
+          </p>
+          <div className="detail-actions">
+            <button
+              className="danger-button"
+              disabled={isCancelling}
+              onClick={() => void handleCancelConfirmation()}
+              type="button"
+            >
+              {isCancelling ? 'Cancelando...' : 'Confirmar cancelación'}
+            </button>
+            <button
+              className="secondary-button secondary-button-outline"
+              disabled={isCancelling}
+              onClick={() => setIsConfirmingCancel(false)}
+              type="button"
+            >
+              Volver
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="detail-layout">
+        <div className="detail-column stack">
+          <section className="card stack" aria-labelledby="reference-summary-title">
+            <div className="workspace-results-header">
+              <h2 id="reference-summary-title">Resumen de Referencia</h2>
+              <span className={`status-pill status-${reference.status.toLowerCase()}`}>
+                {statusLabel[reference.status]}
+              </span>
+            </div>
+
+            <dl className="detail-summary-list">
+              <div>
+                <dt>Estado</dt>
+                <dd>{statusLabel[reference.status]}</dd>
+              </div>
+              <div>
+                <dt>Versión actual</dt>
+                <dd>{reference.version}</dd>
+              </div>
+              <div>
+                <dt>Referencia externa</dt>
+                <dd>{reference.externalReference ?? 'Sin referencia externa'}</dd>
+              </div>
+              <div>
+                <dt>Monto</dt>
+                <dd>{formatMoney(reference.amount, reference.currency)}</dd>
+              </div>
+              <div>
+                <dt>Fecha de vencimiento</dt>
+                <dd>{formatDateTime(reference.dueDate)}</dd>
+              </div>
+              <div>
+                <dt>Creada</dt>
+                <dd>{formatDateTime(reference.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>Actualizada</dt>
+                <dd>{formatDateTime(reference.updatedAt)}</dd>
+              </div>
+              <div>
+                <dt>Creada por</dt>
+                <dd>{reference.createdBy.username ?? reference.createdBy.id}</dd>
+              </div>
+            </dl>
+          </section>
         </div>
 
-        <dl className="detail-summary-grid">
-          <div>
-            <dt>Estado efectivo</dt>
-            <dd>{statusLabel[reference.status]}</dd>
-          </div>
-          <div>
-            <dt>Versión actual</dt>
-            <dd>{reference.version}</dd>
-          </div>
-          <div>
-            <dt>Referencia externa</dt>
-            <dd>{reference.externalReference ?? 'Sin referencia externa'}</dd>
-          </div>
-          <div>
-            <dt>Monto</dt>
-            <dd>{formatMoney(reference.amount, reference.currency)}</dd>
-          </div>
-          <div>
-            <dt>Vence</dt>
-            <dd>{formatDateTime(reference.dueDate)}</dd>
-          </div>
-          <div>
-            <dt>Creada</dt>
-            <dd>{formatDateTime(reference.createdAt)}</dd>
-          </div>
-          <div>
-            <dt>Actualizada</dt>
-            <dd>{formatDateTime(reference.updatedAt)}</dd>
-          </div>
-          <div>
-            <dt>Creada por</dt>
-            <dd>{reference.createdBy.username ?? reference.createdBy.id}</dd>
-          </div>
-        </dl>
-      </section>
-
-      {isSupervisor ? (
-        <section className="card stack" aria-labelledby="reference-cancel-title">
+        <section className="card stack history-card" aria-labelledby="reference-history-title">
           <div className="stack stack-sm">
-            <h2 id="reference-cancel-title">Cancelación supervisada</h2>
+            <h2 id="reference-history-title">Historial y auditoría</h2>
             <p className="muted-copy">
-              La cancelación exige confirmación y siempre usa la última versión visible en pantalla.
+              Cada entrada muestra quién actuó, qué ocurrió y cuándo quedó registrado.
             </p>
           </div>
 
-          {canCancel ? (
-            isConfirmingCancel ? (
-              <div
-                className="confirm-panel stack"
-                role="alertdialog"
-                aria-labelledby="cancel-dialog-title"
-                aria-describedby="cancel-dialog-copy"
-              >
-                <h3 id="cancel-dialog-title">Confirmar cancelación</h3>
-                <p id="cancel-dialog-copy">
-                  Vamos a cancelar la referencia usando la versión <strong>{reference.version}</strong>.
-                  Si alguien cambió el estado antes, refrescaremos el detalle para que no operes sobre datos viejos.
-                </p>
-                <div className="detail-actions">
-                  <button
-                    className="primary-button"
-                    disabled={isCancelling}
-                    onClick={() => void handleCancelConfirmation()}
-                    type="button"
-                  >
-                    {isCancelling ? 'Cancelando...' : 'Confirmar cancelación'}
-                  </button>
-                  <button
-                    className="secondary-button"
-                    disabled={isCancelling}
-                    onClick={() => setIsConfirmingCancel(false)}
-                    type="button"
-                  >
-                    Volver
-                  </button>
+          <div className="history-list" role="list">
+            {history.map((entry) => (
+              <article className="history-item" key={entry.id} role="listitem">
+                <span className="history-dot" aria-hidden="true" />
+                <div className="history-item-copy">
+                  <div className="history-item-title-row">
+                    <strong>{formatHistoryTitle(entry)}</strong>
+                    <span className="history-timestamp">{formatDateTime(entry.createdAt)}</span>
+                  </div>
+                  <div className="history-item-meta-row">
+                    <span>{formatActor(entry)}</span>
+                    <span className="history-meta-separator" aria-hidden="true">
+                      •
+                    </span>
+                    <span>Correlation ID: {entry.correlationId ?? '—'}</span>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <button
-                className="primary-button"
-                onClick={() => {
-                  setFeedback(null);
-                  setIsConfirmingCancel(true);
-                }}
-                type="button"
-              >
-                Cancelar referencia
-              </button>
-            )
-          ) : (
-            <div className="notice" role="status">
-              Esta referencia ya no admite cancelación desde su estado actual.
-            </div>
-          )}
+              </article>
+            ))}
+          </div>
         </section>
-      ) : null}
-
-      <section className="card stack" aria-labelledby="reference-history-title">
-        <div className="stack stack-sm">
-          <h2 id="reference-history-title">Historial y auditoría</h2>
-          <p className="muted-copy">
-            Cada entrada muestra quién actuó, qué ocurrió y cuándo quedó registrado.
-          </p>
-        </div>
-
-        <div className="history-list" role="list">
-          {history.map((entry) => (
-            <article className="history-item stack stack-sm" key={entry.id} role="listitem">
-              <div className="workspace-results-header">
-                <strong>{formatHistoryTitle(entry)}</strong>
-                <span>{formatDateTime(entry.createdAt)}</span>
-              </div>
-              <dl className="history-meta-grid">
-                <div>
-                  <dt>Actor</dt>
-                  <dd>{formatActor(entry)}</dd>
-                </div>
-                <div>
-                  <dt>Correlation ID</dt>
-                  <dd>{entry.correlationId ?? '—'}</dd>
-                </div>
-              </dl>
-              {entry.metadata ? (
-                <pre className="history-metadata">{JSON.stringify(entry.metadata, null, 2)}</pre>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      </section>
+      </div>
     </main>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path d="M10.78 5.47a.75.75 0 0 1 0 1.06L6.31 11h11.94a.75.75 0 0 1 0 1.5H6.31l4.47 4.47a.75.75 0 1 1-1.06 1.06l-5.75-5.75a.75.75 0 0 1 0-1.06l5.75-5.75a.75.75 0 0 1 1.06 0Z" fill="currentColor" />
+    </svg>
   );
 }

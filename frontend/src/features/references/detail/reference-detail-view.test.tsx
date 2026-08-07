@@ -108,7 +108,7 @@ describe('ReferenceDetailView', () => {
     expect(screen.getByText('CREATE REFERENCE · SUCCESS')).toBeInTheDocument();
     expect(screen.getByText('CREATE REFERENCE · REPLAYED')).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: 'Volver al listado' }),
+      screen.getByRole('link', { name: 'Volver' }),
     ).toHaveAttribute('href', '/references?status=PENDING');
     expect(
       screen.queryByRole('button', { name: 'Cancelar referencia' }),
@@ -346,9 +346,6 @@ describe('ReferenceDetailView', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getAllByText('Pagada').length).toBeGreaterThan(0);
-    expect(screen.getByText('Esta referencia ya no admite cancelación desde su estado actual.')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Cancelar referencia' }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar referencia' })).toBeDisabled();
   });
 });

@@ -47,14 +47,22 @@ export function CreateReferenceForm() {
 
   return (
     <main className="create-page-shell">
+      <div className="page-back-link-row">
+        <Link className="back-link" href="/references">
+          <BackIcon />
+          <span>Volver</span>
+        </Link>
+      </div>
+
+      <section className="create-page-intro stack stack-sm" aria-labelledby="create-reference-title">
+        <p className="eyebrow">Nueva referencia</p>
+        <h1 id="create-reference-title">Crear referencia de pago</h1>
+      </section>
+
       <section className="card stack create-card" aria-labelledby="create-reference-title">
         <div className="stack stack-sm">
-          <p className="eyebrow">Nueva referencia</p>
-          <h1 id="create-reference-title">Crear referencia de pago</h1>
           <p className="muted-copy">
-            Validamos antes de enviar, convertimos el monto a unidades menores y
-            reutilizamos la misma clave de idempotencia mientras el intento siga
-            siendo el mismo.
+            Completá los datos para generar una nueva referencia de pago.
           </p>
         </div>
 
@@ -116,7 +124,7 @@ export function CreateReferenceForm() {
           }}
         >
           <label className="field" htmlFor="concept">
-            <span>Concepto</span>
+            <span>Concepto de Recaudo</span>
             <input
               aria-describedby={fieldErrors.concept ? 'concept-error' : undefined}
               aria-invalid={Boolean(fieldErrors.concept)}
@@ -128,6 +136,9 @@ export function CreateReferenceForm() {
               placeholder="Ej. Matrícula agosto"
               value={values.concept}
             />
+            {!fieldErrors.concept ? (
+              <span className="field-hint">Este nombre será visible en el detalle y en el listado de referencias.</span>
+            ) : null}
             {fieldErrors.concept ? (
               <span className="field-error" id="concept-error">
                 {fieldErrors.concept}
@@ -159,18 +170,20 @@ export function CreateReferenceForm() {
 
             <label className="field" htmlFor="currency">
               <span>Moneda</span>
-              <input
+              <select
                 aria-describedby={fieldErrors.currency ? 'currency-error' : undefined}
                 aria-invalid={Boolean(fieldErrors.currency)}
                 id="currency"
-                maxLength={3}
                 name="currency"
                 onChange={(event) =>
                   setValues((current) => ({ ...current, currency: event.target.value.toUpperCase() }))
                 }
-                placeholder="COP"
                 value={values.currency}
-              />
+              >
+                <option value="COP">COP</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
               {fieldErrors.currency ? (
                 <span className="field-error" id="currency-error">
                   {fieldErrors.currency}
@@ -180,7 +193,7 @@ export function CreateReferenceForm() {
           </div>
 
           <label className="field" htmlFor="dueDate">
-            <span>Vencimiento</span>
+            <span>Fecha de Vencimiento</span>
             <input
               aria-describedby={fieldErrors.dueDate ? 'dueDate-error' : undefined}
               aria-invalid={Boolean(fieldErrors.dueDate)}
@@ -199,19 +212,24 @@ export function CreateReferenceForm() {
             ) : null}
           </label>
 
-          <div className="form-actions-row">
-            <button className="primary-button" disabled={isSubmitting} type="submit">
+          <div className="form-actions-row create-form-actions">
+            <button className="primary-button create-submit-button" disabled={isSubmitting} type="submit">
               {isSubmitting ? 'Creando...' : 'Crear referencia'}
             </button>
-            <button className="secondary-button" disabled={isSubmitting} onClick={resetForm} type="button">
+            <button className="secondary-button secondary-button-outline" disabled={isSubmitting} onClick={resetForm} type="button">
               Reiniciar intento
             </button>
-            <Link className="text-link" href="/references">
-              Volver al listado
-            </Link>
           </div>
         </form>
       </section>
     </main>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path d="M10.78 5.47a.75.75 0 0 1 0 1.06L6.31 11h11.94a.75.75 0 0 1 0 1.5H6.31l4.47 4.47a.75.75 0 1 1-1.06 1.06l-5.75-5.75a.75.75 0 0 1 0-1.06l5.75-5.75a.75.75 0 0 1 1.06 0Z" fill="currentColor" />
+    </svg>
   );
 }

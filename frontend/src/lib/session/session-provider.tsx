@@ -281,15 +281,36 @@ export function ProtectedRouteGate({ children }: { children: ReactNode }) {
   return (
     <div className="protected-shell">
       <header className="protected-header">
-        <div>
-          <strong>{user.username}</strong>
-          <span>{user.role}</span>
+        <div className="protected-brand" aria-label="Puntored">
+          Punto<span>red</span>
         </div>
-        <button className="secondary-button" onClick={() => void logout()} type="button">
-          Cerrar sesión
-        </button>
+        <div className="protected-user-panel">
+          <div className="protected-user-badge" aria-hidden="true">
+            {user.username.slice(0, 1).toUpperCase()}
+          </div>
+          <div className="protected-user-copy">
+            <strong>{user.username}</strong>
+            <span>{user.role}</span>
+          </div>
+          <span className="protected-user-divider" aria-hidden="true" />
+          <button className="protected-logout-button" onClick={() => void logout()} type="button">
+            <LogoutIcon />
+            <span>Cerrar sesión</span>
+          </button>
+        </div>
       </header>
       <main className="protected-main">{children}</main>
     </div>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path
+        d="M13 4.75a.75.75 0 0 1 .75-.75h3.5A2.75 2.75 0 0 1 20 6.75v10.5A2.75 2.75 0 0 1 17.25 20h-3.5a.75.75 0 0 1 0-1.5h3.5c.69 0 1.25-.56 1.25-1.25V6.75c0-.69-.56-1.25-1.25-1.25h-3.5a.75.75 0 0 1-.75-.75Zm-5.72 6.72a.75.75 0 0 0 0 1.06l2.5 2.5a.75.75 0 1 0 1.06-1.06l-1.22-1.22h6.13a.75.75 0 0 0 0-1.5H9.62l1.22-1.22a.75.75 0 1 0-1.06-1.06l-2.5 2.5Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }

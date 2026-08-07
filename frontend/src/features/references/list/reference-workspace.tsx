@@ -146,16 +146,16 @@ export function ReferenceWorkspace() {
   return (
     <section className="workspace stack" aria-labelledby="workspace-title">
       <div className="workspace-heading">
-        <div className="stack stack-sm">
+        <div className="stack stack-sm page-heading-copy">
           <p className="eyebrow">Referencias</p>
           <h1 id="workspace-title">Workspace de referencias</h1>
           <p className="workspace-copy">
-            Buscá, filtrá y recorré referencias desde la URL para poder refrescar o
-            volver atrás sin perder contexto.
+            Consultá, filtrá y seguí el estado de tus referencias sin perder el contexto del listado.
           </p>
         </div>
 
-        <Link className="primary-link" href="/references/new">
+        <Link className="primary-link primary-link-with-icon" href="/references/new">
+          <PlusIcon />
           Crear referencia
         </Link>
       </div>
@@ -166,121 +166,121 @@ export function ReferenceWorkspace() {
         </div>
       ) : null}
 
-      <section className="card stack" aria-labelledby="filters-title">
+      <section className="card stack filters-card" aria-labelledby="filters-title">
         <div className="stack stack-sm">
           <h2 id="filters-title">Filtros</h2>
-          <p className="muted-copy">
-            El estado del listado vive en la URL: búsqueda, filtros y página actual.
-          </p>
         </div>
 
         <form
-          className="filters-grid"
+          className="stack filters-form"
           onSubmit={(event) => {
             event.preventDefault();
             applyFilters();
           }}
         >
-          <label className="field" htmlFor="search">
-            <span>Buscar</span>
-            <input
-              id="search"
-              name="search"
-              onChange={(event) =>
-                setDraftState((current) => ({
-                  ...current,
-                  search: event.target.value,
-                }))
-              }
-              placeholder="Concepto o referencia externa"
-              value={draftState.search}
-            />
-          </label>
+          <div className="filters-grid filters-grid-five">
+            <label className="field" htmlFor="search">
+              <span>Buscar Concepto</span>
+              <input
+                id="search"
+                name="search"
+                onChange={(event) =>
+                  setDraftState((current) => ({
+                    ...current,
+                    search: event.target.value,
+                  }))
+                }
+                placeholder="Concepto o referencia externa"
+                value={draftState.search}
+              />
+            </label>
 
-          <label className="field" htmlFor="status">
-            <span>Estado</span>
-            <select
-              id="status"
-              name="status"
-              onChange={(event) =>
-                setDraftState((current) => ({
-                  ...current,
-                  status: event.target.value ? (event.target.value as ReferenceListUrlState['status']) : null,
-                }))
-              }
-              value={draftState.status ?? ''}
-            >
-              <option value="">Todos</option>
-              <option value="PENDING">Pendiente</option>
-              <option value="PAID">Pagada</option>
-              <option value="CANCELLED">Cancelada</option>
-              <option value="EXPIRED">Expirada</option>
-            </select>
-          </label>
+            <label className="field" htmlFor="status">
+              <span>Estado</span>
+              <select
+                id="status"
+                name="status"
+                onChange={(event) =>
+                  setDraftState((current) => ({
+                    ...current,
+                    status: event.target.value ? (event.target.value as ReferenceListUrlState['status']) : null,
+                  }))
+                }
+                value={draftState.status ?? ''}
+              >
+                <option value="">Todos</option>
+                <option value="PENDING">Pendiente</option>
+                <option value="PAID">Pagada</option>
+                <option value="CANCELLED">Cancelada</option>
+                <option value="EXPIRED">Expirada</option>
+              </select>
+            </label>
 
-          <label className="field" htmlFor="createdFrom">
-            <span>Creada desde</span>
-            <input
-              id="createdFrom"
-              name="createdFrom"
-              onChange={(event) =>
-                setDraftState((current) => ({
-                  ...current,
-                  createdFrom: event.target.value,
-                }))
-              }
-              type="date"
-              value={draftState.createdFrom}
-            />
-          </label>
+            <label className="field" htmlFor="createdFrom">
+              <span>Creada desde</span>
+              <input
+                id="createdFrom"
+                name="createdFrom"
+                onChange={(event) =>
+                  setDraftState((current) => ({
+                    ...current,
+                    createdFrom: event.target.value,
+                  }))
+                }
+                type="date"
+                value={draftState.createdFrom}
+              />
+            </label>
 
-          <label className="field" htmlFor="createdTo">
-            <span>Creada hasta</span>
-            <input
-              id="createdTo"
-              name="createdTo"
-              onChange={(event) =>
-                setDraftState((current) => ({
-                  ...current,
-                  createdTo: event.target.value,
-                }))
-              }
-              type="date"
-              value={draftState.createdTo}
-            />
-          </label>
+            <label className="field" htmlFor="createdTo">
+              <span>Creada hasta</span>
+              <input
+                id="createdTo"
+                name="createdTo"
+                onChange={(event) =>
+                  setDraftState((current) => ({
+                    ...current,
+                    createdTo: event.target.value,
+                  }))
+                }
+                type="date"
+                value={draftState.createdTo}
+              />
+            </label>
 
-          <label className="field" htmlFor="limit">
-            <span>Resultados por página</span>
-            <select
-              id="limit"
-              name="limit"
-              onChange={(event) =>
-                setDraftState((current) => ({
-                  ...current,
-                  limit: Number(event.target.value),
-                }))
-              }
-              value={String(draftState.limit)}
-            >
-              <option value="10">10</option>
-              <option value="20">20</option>
-              <option value="50">50</option>
-            </select>
-          </label>
+            <label className="field" htmlFor="limit">
+              <span>Resultados por pág.</span>
+              <select
+                id="limit"
+                name="limit"
+                onChange={(event) =>
+                  setDraftState((current) => ({
+                    ...current,
+                    limit: Number(event.target.value),
+                  }))
+                }
+                value={String(draftState.limit)}
+              >
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+          </div>
 
           <div className="filters-actions">
-            <button className="primary-button" type="submit">
-              Aplicar filtros
-            </button>
-            <button className="secondary-button" onClick={resetFilters} type="button">
+            <button className="secondary-button secondary-button-outline" onClick={resetFilters} type="button">
               Limpiar
+            </button>
+            <button className="primary-button primary-button-dark" type="submit">
+              <FilterIcon />
+              <span>Aplicar filtros</span>
             </button>
           </div>
         </form>
       </section>
 
-      <section className="card stack" aria-labelledby="results-title">
+      <section className="card stack results-card" aria-labelledby="results-title">
         <div className="workspace-results-header">
           <div className="stack stack-sm">
             <h2 id="results-title">Resultados</h2>
@@ -438,5 +438,21 @@ export function ReferenceWorkspace() {
         </div>
       </section>
     </section>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path d="M12 5.25a.75.75 0 0 1 .75.75v5.25H18a.75.75 0 0 1 0 1.5h-5.25V18a.75.75 0 0 1-1.5 0v-5.25H6a.75.75 0 0 1 0-1.5h5.25V6a.75.75 0 0 1 .75-.75Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path d="M4.75 6A.75.75 0 0 1 5.5 5.25h13a.75.75 0 0 1 .53 1.28l-5.28 5.28v5.44a.75.75 0 0 1-1.17.62l-2.5-1.75a.75.75 0 0 1-.33-.62v-3.69L4.97 6.53A.75.75 0 0 1 4.75 6Z" fill="currentColor" />
+    </svg>
   );
 }

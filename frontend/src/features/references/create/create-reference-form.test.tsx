@@ -32,11 +32,10 @@ const jsonResponse = (status: number, body?: unknown) =>
   });
 
 const fillValidForm = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.type(screen.getByLabelText('Concepto'), ' Matrícula agosto ');
+  await user.type(screen.getByLabelText(/Concepto de Recaudo/i), ' Matrícula agosto ');
   await user.type(screen.getByLabelText('Monto'), '1250.50');
-  await user.clear(screen.getByLabelText('Moneda'));
-  await user.type(screen.getByLabelText('Moneda'), 'cop');
-  await user.type(screen.getByLabelText('Vencimiento'), '2026-08-20T10:00');
+  await user.selectOptions(screen.getByLabelText(/Moneda/i), 'COP');
+  await user.type(screen.getByLabelText(/Fecha de Vencimiento/i), '2026-08-20T10:00');
 };
 
 describe('CreateReferenceForm', () => {

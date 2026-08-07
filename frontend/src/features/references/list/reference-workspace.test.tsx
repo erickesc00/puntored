@@ -82,7 +82,7 @@ describe('ReferenceWorkspace', () => {
     expect(screen.getByLabelText('Estado')).toHaveValue('PENDING');
     expect(screen.getByDisplayValue('2026-08-01')).toBeInTheDocument();
     expect(screen.getByDisplayValue('2026-08-10')).toBeInTheDocument();
-    expect(screen.getByLabelText('Resultados por página')).toHaveValue('20');
+    expect(screen.getByLabelText('Resultados por pág.')).toHaveValue('20');
     expect((await screen.findAllByText('Matrícula agosto')).length).toBeGreaterThan(0);
     expect(screen.getByText('Página 3 · 1 resultado')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
