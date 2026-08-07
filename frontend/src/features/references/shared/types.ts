@@ -26,3 +26,19 @@ export interface ReferenceListResponse {
     nextCursor: string | null;
   };
 }
+
+export interface ReferenceAuditEntry {
+  id: string;
+  actorType: string;
+  actorId: string | null;
+  action: string;
+  result: string;
+  correlationId: string | null;
+  metadata?: unknown;
+  createdAt: string;
+}
+
+export interface ReferenceDetailResponse {
+  reference: ReferenceSummary;
+  history: ReferenceAuditEntry[];
+}

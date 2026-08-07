@@ -140,6 +140,8 @@ export function ReferenceWorkspace() {
   const page = getReferenceListPage(urlState);
   const previousState = getPreviousReferenceListState(urlState);
   const createdId = searchParams.get('created');
+  const buildDetailHref = (referenceId: string) =>
+    `/references/${referenceId}?returnTo=${encodeURIComponent(currentUrl)}`;
 
   return (
     <section className="workspace stack" aria-labelledby="workspace-title">
@@ -345,8 +347,15 @@ export function ReferenceWorkspace() {
                   {items.map((item) => (
                     <tr key={item.id}>
                       <td>
-                        <div className="table-primary">{item.concept}</div>
-                        <div className="table-secondary">{item.externalReference ?? 'Sin referencia externa'}</div>
+                       <div className="table-primary">{item.concept}</div>
+                       <div className="table-secondary">{item.externalReference ?? 'Sin referencia externa'}</div>
+                       <Link
+                         aria-label={`Ver detalle de ${item.concept}`}
+                         className="text-link table-detail-link"
+                         href={buildDetailHref(item.id)}
+                       >
+                         Ver detalle
+                       </Link>
                       </td>
                       <td>
                         <span className={`status-pill status-${item.status.toLowerCase()}`}>
@@ -395,6 +404,13 @@ export function ReferenceWorkspace() {
                         <dd>{item.externalReference ?? 'Sin referencia externa'}</dd>
                       </div>
                     </dl>
+                    <Link
+                      aria-label={`Ver detalle de ${item.concept}`}
+                      className="text-link"
+                      href={buildDetailHref(item.id)}
+                    >
+                      Ver detalle
+                    </Link>
                   </div>
                 </article>
               ))}

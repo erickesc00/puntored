@@ -222,12 +222,19 @@ button {
 }
 
 .workspace,
-.create-page-shell {
+.create-page-shell,
+.detail-page-shell {
   width: min(100%, 1120px);
   margin: 0 auto;
 }
 
 .workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.detail-page-shell {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -304,6 +311,10 @@ button {
   margin-top: 4px;
 }
 
+.table-detail-link {
+  margin-top: 8px;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -368,6 +379,62 @@ button {
   padding: 20px;
 }
 
+.detail-heading {
+  align-items: flex-start;
+}
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-summary-grid,
+.history-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+
+.detail-summary-grid dt,
+.history-meta-grid dt,
+.reference-card-grid dt {
+  color: #63728b;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.detail-summary-grid dd,
+.history-meta-grid dd {
+  margin: 0;
+}
+
+.confirm-panel,
+.history-item {
+  border: 1px solid #e3e8f2;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-metadata {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8faff;
+  color: #123770;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .loading-panel {
   background: #f8faff;
   color: #123770;
@@ -383,7 +450,8 @@ button {
 @media (max-width: 640px) {
   .page-shell,
   .protected-main,
-  .create-page-shell {
+  .create-page-shell,
+  .detail-page-shell {
     padding: 16px;
   }
 
@@ -400,7 +468,8 @@ button {
   .workspace-results-header,
   .form-actions-row,
   .pagination-actions,
-  .reference-card-header {
+  .reference-card-header,
+  .detail-actions {
     flex-direction: column;
     align-items: stretch;
   }
