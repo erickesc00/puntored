@@ -1,6 +1,6 @@
 import { normalizeApiError } from './errors';
 
-type JsonBody = Record<string, unknown>;
+type JsonBody = object;
 
 export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
   body?: BodyInit | JsonBody | null;
