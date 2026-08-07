@@ -48,7 +48,7 @@ describe('LoginPageClient', () => {
     render(<LoginPageClient />);
 
     await user.type(screen.getByLabelText('Usuario'), 'operator');
-    await user.type(screen.getByLabelText('Password'), 'bad-password');
+    await user.type(screen.getByLabelText('Contraseña'), 'bad-password');
     await user.click(screen.getByRole('button', { name: 'Ingresar' }));
 
     expect(loginMock).toHaveBeenCalledWith({

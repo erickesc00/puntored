@@ -1,0 +1,201 @@
+.pageShell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background:
+    radial-gradient(circle at top, rgba(226, 69, 154, 0.08), transparent 28%),
+    #f5f7fa;
+}
+
+.card {
+  width: min(100%, 450px);
+  padding: 40px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgba(17, 24, 39, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.brandBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.wordmark {
+  font-size: clamp(2rem, 5vw, 2.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #172033;
+}
+
+.wordmark span {
+  color: #df2f87;
+}
+
+.badge {
+  margin: -4px 0 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: #1f2937;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.headingGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #172033;
+}
+
+.subtitle {
+  margin: 0;
+  color: #5c667a;
+  line-height: 1.5;
+}
+
+.notice,
+.errorBanner {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 0.95rem;
+}
+
+.notice {
+  background: #eef4ff;
+  color: #123770;
+}
+
+.errorBanner {
+  background: #fdebec;
+  color: #8d1c22;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #253047;
+}
+
+.inputShell {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.leadingIcon,
+.trailingIconButton {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #7f889b;
+}
+
+.leadingIcon {
+  left: 16px;
+  pointer-events: none;
+}
+
+.leadingIcon svg,
+.trailingIconButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.input {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 48px 14px 48px;
+  border: 1px solid #d7ddea;
+  border-radius: 12px;
+  background: #f8f9fc;
+  color: #172033;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.input::placeholder {
+  color: #98a2b3;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #df2f87;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(223, 47, 135, 0.14);
+}
+
+.trailingIconButton {
+  right: 14px;
+  border: 0;
+  padding: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.trailingIconButton:focus-visible,
+.submitButton:focus-visible {
+  outline: 2px solid #df2f87;
+  outline-offset: 2px;
+}
+
+.submitButton {
+  min-height: 52px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #df2f87, #c81d73);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1rem;
+  box-shadow: 0 14px 28px rgba(223, 47, 135, 0.28);
+}
+
+.submitButton:disabled {
+  opacity: 0.75;
+  cursor: wait;
+  box-shadow: none;
+}
+
+@media (max-width: 640px) {
+  .pageShell {
+    padding: 20px 16px;
+  }
+
+  .card {
+    padding: 28px 22px;
+  }
+
+  .title {
+    font-size: 1.4rem;
+  }
+}
