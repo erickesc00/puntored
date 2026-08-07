@@ -1,0 +1,95 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: puntored
+      MYSQL_USER: puntored
+      MYSQL_PASSWORD: puntored
+    ports:
+      - '33060:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-proot']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  backend-init:
+    build:
+      context: ./backend
+    restart: 'no'
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: mysql://puntored:puntored@mysql:3306/puntored
+      COOKIE_SECURE: 'false'
+    command: >-
+      sh -c "
+      npm run prisma:generate &&
+      until npm run prisma:migrate:deploy; do
+        echo 'Waiting for MySQL migrations readiness...';
+        sleep 2;
+      done &&
+      npm run prisma:seed
+      "
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: mysql://puntored:puntored@mysql:3306/puntored
+      COOKIE_SECURE: 'false'
+    command: npm run start:prod
+    ports:
+      - '3000:3000'
+    depends_on:
+      mysql:
+        condition: service_healthy
+      backend-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://127.0.0.1:3000/api/health >/dev/null 2>&1 || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+    env_file:
+      - frontend/.env.local
+    environment:
+      BACKEND_ORIGIN: http://backend:3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - '3001:3001'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://127.0.0.1:3001/login >/dev/null 2>&1 || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  mysql-data:
