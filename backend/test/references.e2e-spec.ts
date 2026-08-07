@@ -7,6 +7,7 @@ import { PrismaService } from '../src/common/prisma/prisma.service';
 import { ReferenceStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import { DEMO_REFERENCE_FIXTURES, seedDatabase } from '../prisma/seed';
 import { createRealTestApp } from './helpers/create-real-test-app';
 import { getSeedUsers, resetTestDatabase } from './helpers/mysql-test-db';
 
@@ -100,6 +101,11 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     });
   };
 
+  const getMetricsText = async () => {
+    const response = await request(getHttpServer()).get('/api/metrics').expect(200);
+    return response.text;
+  };
+
   it('replays the same logical result for the same idempotency key and payload, with persisted evidence', async () => {
     const operatorCookie = await createSessionCookie(operatorUser.id);
     const payload = buildCreatePayload();
@@ -182,6 +188,11 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
       'CREATE_REFERENCE:SUCCESS',
       'CREATE_REFERENCE:REJECTED_IDEMPOTENCY_CONFLICT',
     ]);
+
+    const metricsText = await getMetricsText();
+    expect(metricsText).toContain('puntored_reference_create_total');
+    expect(metricsText).toContain('outcome="success"');
+    expect(metricsText).toContain('outcome="rejected_idempotency_conflict"');
   });
 
   it('filters the list by persisted status', async () => {
@@ -421,6 +432,55 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     ).toEqual(auditRows.map((row) => `${row.action}:${row.result}`));
   });
 
+  it('seeds canonical demo fixtures without duplicating references or audit history', async () => {
+    await seedDatabase(prisma, { bcryptRounds: 4 });
+    await seedDatabase(prisma, { bcryptRounds: 4 });
+
+    const references = await prisma.paymentReference.findMany({
+      where: {
+        externalReference: {
+          in: DEMO_REFERENCE_FIXTURES.map((fixture) => fixture.externalReference),
+        },
+      },
+      orderBy: { externalReference: 'asc' },
+      select: {
+        externalReference: true,
+        status: true,
+        version: true,
+      },
+    });
+
+    const auditCounts = await Promise.all(
+      DEMO_REFERENCE_FIXTURES.map(async (fixture) => {
+        const reference = await prisma.paymentReference.findUniqueOrThrow({
+          where: { externalReference: fixture.externalReference },
+          select: { id: true },
+        });
+
+        return {
+          externalReference: fixture.externalReference,
+          auditCount: await prisma.auditEvent.count({
+            where: { referenceId: reference.id },
+          }),
+        };
+      }),
+    );
+
+    expect(references).toEqual(
+      DEMO_REFERENCE_FIXTURES.map((fixture) => ({
+        externalReference: fixture.externalReference,
+        status: fixture.status,
+        version: fixture.history.length,
+      })),
+    );
+    expect(auditCounts).toEqual(
+      DEMO_REFERENCE_FIXTURES.map((fixture) => ({
+        externalReference: fixture.externalReference,
+        auditCount: fixture.history.length,
+      })),
+    );
+  });
+
   it('cancels a persisted pending reference as supervisor and increments version', async () => {
     const operatorCookie = await createSessionCookie(operatorUser.id);
     const supervisorCookie = await createSessionCookie(supervisorUser.id);
@@ -460,6 +520,10 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
       'CANCEL_ATTEMPT:STARTED',
       'CANCEL_REFERENCE:SUCCESS',
     ]);
+
+    const metricsText = await getMetricsText();
+    expect(metricsText).toContain('puntored_reference_cancel_total');
+    expect(metricsText).toContain('outcome="success"');
   });
 
   it('rejects cancelling an already cancelled reference and persists the rejection audit trail', async () => {
@@ -550,6 +614,10 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
       'CANCEL_ATTEMPT:STARTED',
       'CANCEL_REFERENCE:REJECTED_VERSION_CONFLICT',
     ]);
+
+    const metricsText = await getMetricsText();
+    expect(metricsText).toContain('puntored_reference_cancel_total');
+    expect(metricsText).toContain('outcome="rejected_version_conflict"');
   });
 
   it('forbids cancel for operator and preserves persisted state', async () => {

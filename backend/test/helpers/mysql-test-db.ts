@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { hash } from 'bcrypt';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import mysql from 'mysql2/promise';
+import { DEMO_PASSWORD, seedUsers } from '../../prisma/seed';
 
 const backendRoot = resolve(__dirname, '..', '..');
 const TEST_DATABASE_NAME = `puntored_test_${process.pid}`;
@@ -10,7 +10,7 @@ const TEST_DATABASE_NAME = `puntored_test_${process.pid}`;
 export const TEST_DATABASE_URL_DEFAULT = `mysql://puntored:puntored@127.0.0.1:33060/${TEST_DATABASE_NAME}`;
 export const TEST_DATABASE_ADMIN_URL_DEFAULT =
   'mysql://root:root@127.0.0.1:33060/mysql';
-export const TEST_PASSWORD = 'Puntored123!';
+export const TEST_PASSWORD = DEMO_PASSWORD;
 
 let databasePrepared = false;
 let preparedDatabaseUrl: string | null = null;
@@ -145,41 +145,7 @@ export async function ensureTestDatabaseReady() {
 }
 
 export async function seedBaseUsers(prisma: PrismaClient) {
-  const passwordHash = await hash(TEST_PASSWORD, 4);
-
-  await prisma.user.upsert({
-    where: { username: 'operator' },
-    update: {
-      email: 'operator@puntored.local',
-      passwordHash,
-      role: UserRole.OPERATOR,
-      active: true,
-    },
-    create: {
-      username: 'operator',
-      email: 'operator@puntored.local',
-      passwordHash,
-      role: UserRole.OPERATOR,
-      active: true,
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { username: 'supervisor' },
-    update: {
-      email: 'supervisor@puntored.local',
-      passwordHash,
-      role: UserRole.SUPERVISOR,
-      active: true,
-    },
-    create: {
-      username: 'supervisor',
-      email: 'supervisor@puntored.local',
-      passwordHash,
-      role: UserRole.SUPERVISOR,
-      active: true,
-    },
-  });
+  await seedUsers(prisma, { bcryptRounds: 4 });
 }
 
 export async function resetTestDatabase(prisma: PrismaClient) {
