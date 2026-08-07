@@ -46,6 +46,20 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  private readonly referenceCreates = new Counter({
+    name: 'puntored_reference_create_total',
+    help: 'Reference create attempts handled by business outcome',
+    labelNames: ['outcome'],
+    registers: [this.registry],
+  });
+
+  private readonly referenceCancels = new Counter({
+    name: 'puntored_reference_cancel_total',
+    help: 'Reference cancel attempts handled by business outcome',
+    labelNames: ['outcome'],
+    registers: [this.registry],
+  });
+
   constructor() {
     this.registry.setDefaultLabels({ service: 'puntored-backend' });
     collectDefaultMetrics({ register: this.registry, prefix: 'puntored_' });
@@ -77,6 +91,14 @@ export class MetricsService {
 
   recordProviderEvent(eventType: string, outcome: string) {
     this.providerEvents.inc({ event_type: eventType, outcome });
+  }
+
+  recordReferenceCreate(outcome: string) {
+    this.referenceCreates.inc({ outcome });
+  }
+
+  recordReferenceCancel(outcome: string) {
+    this.referenceCancels.inc({ outcome });
   }
 
   async getMetrics() {

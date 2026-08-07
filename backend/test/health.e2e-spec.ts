@@ -66,6 +66,8 @@ describe('Health endpoints (e2e)', () => {
       .expect(200)
       .expect((response: SupertestResponse) => {
         expect(response.text).toContain('puntored_http_requests_total');
+        expect(response.text).toContain('puntored_reference_create_total');
+        expect(response.text).toContain('puntored_reference_cancel_total');
       });
   });
 

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ReferenceStatus, UserRole } from '@prisma/client';
+import { MetricsService } from '../../common/metrics/metrics.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { SessionAuth } from '../auth/guards/session.guard';
 import { CancelReferenceDto } from './dto/cancel-reference.dto';
@@ -44,7 +45,10 @@ interface ReferenceRecord {
 
 @Injectable()
 export class ReferencesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metricsService: MetricsService,
+  ) {}
 
   async createReference(
     actor: SessionAuth,
@@ -54,6 +58,9 @@ export class ReferencesService {
   ) {
     const trimmedKey = idempotencyKey?.trim();
     if (!trimmedKey) {
+      this.metricsService.recordReferenceCreate(
+        'rejected_missing_idempotency_key',
+      );
       throw new BadRequestException({
         code: 'IDEMPOTENCY_KEY_REQUIRED',
         message: 'Idempotency-Key header is required',
@@ -70,6 +77,7 @@ export class ReferencesService {
     const dueAt = new Date(normalizedPayload.dueDate);
 
     if (dueAt.getTime() <= Date.now()) {
+      this.metricsService.recordReferenceCreate('rejected_invalid_due_date');
       throw new BadRequestException({
         code: 'INVALID_DUE_DATE',
         message: 'dueDate must be in the future',
@@ -144,6 +152,7 @@ export class ReferencesService {
         return reference;
       });
 
+      this.metricsService.recordReferenceCreate('success');
       return this.serializeReference(created);
     } catch (error) {
       if (this.isUniqueViolation(error)) {
@@ -293,6 +302,7 @@ export class ReferencesService {
     });
 
     if (!reference) {
+      this.metricsService.recordReferenceCancel('rejected_not_found');
       await this.prisma.auditEvent.create({
         data: {
           actorType: 'USER',
@@ -360,12 +370,18 @@ export class ReferencesService {
       });
 
       if (eligibility.reason === 'VERSION_MISMATCH') {
+        this.metricsService.recordReferenceCancel('rejected_version_conflict');
         throw new ConflictException({
           code: 'REFERENCE_VERSION_CONFLICT',
           message: 'Reference version conflict',
         });
       }
 
+      this.metricsService.recordReferenceCancel(
+        eligibility.reason === 'REFERENCE_EXPIRED'
+          ? 'rejected_expired'
+          : 'rejected_invalid_state',
+      );
       throw new ConflictException({
         code:
           eligibility.reason === 'REFERENCE_EXPIRED'
@@ -466,12 +482,14 @@ export class ReferencesService {
         },
       });
 
+      this.metricsService.recordReferenceCancel('rejected_version_conflict');
       throw new ConflictException({
         code: 'REFERENCE_VERSION_CONFLICT',
         message: 'Reference version conflict',
       });
     }
 
+    this.metricsService.recordReferenceCancel('success');
     return this.serializeReference(cancellationResult);
   }
 
@@ -496,6 +514,7 @@ export class ReferencesService {
         });
       }
 
+      this.metricsService.recordReferenceCreate('rejected_idempotency_conflict');
       throw new ConflictException({
         code: 'IDEMPOTENCY_CONFLICT',
         message: 'Idempotency key was already used with a different payload',
@@ -503,6 +522,7 @@ export class ReferencesService {
     }
 
     if (!existing.referenceId) {
+      this.metricsService.recordReferenceCreate('rejected_unresolvable_replay');
       throw new ConflictException({
         code: 'IDEMPOTENCY_CONFLICT',
         message: 'Idempotent response could not be resolved',
@@ -540,6 +560,7 @@ export class ReferencesService {
       },
     });
 
+    this.metricsService.recordReferenceCreate('success');
     return this.serializeReference(reference);
   }
 
