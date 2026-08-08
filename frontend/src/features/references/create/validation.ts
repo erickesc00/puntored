@@ -68,21 +68,21 @@ export const validateCreateReference = (
   const dueDate = dueDateIso ? new Date(dueDateIso) : null;
 
   if (!concept) {
-    errors.concept = 'Ingresá un concepto.';
+    errors.concept = 'Ingresa un concepto.';
   } else if (concept.length > 255) {
     errors.concept = 'El concepto no puede superar los 255 caracteres.';
   }
 
   if (minorAmount === null || minorAmount < 1) {
-    errors.amount = 'Ingresá un monto válido con hasta dos decimales.';
+    errors.amount = 'Ingresa un monto válido con hasta dos decimales.';
   }
 
   if (!/^[A-Z]{3}$/.test(currency)) {
-    errors.currency = 'Ingresá una moneda de tres letras, por ejemplo COP.';
+    errors.currency = 'Ingresa una moneda de tres letras, por ejemplo COP.';
   }
 
   if (!dueDate || Number.isNaN(dueDate.getTime())) {
-    errors.dueDate = 'Ingresá una fecha y hora de vencimiento válida.';
+    errors.dueDate = 'Ingresa una fecha y hora de vencimiento válida.';
   } else if (dueDate.getTime() <= now.getTime()) {
     errors.dueDate = 'La referencia debe vencer en el futuro.';
   }

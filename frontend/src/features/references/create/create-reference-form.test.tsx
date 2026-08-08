@@ -89,12 +89,12 @@ describe('CreateReferenceForm', () => {
     await user.click(screen.getByRole('button', { name: 'Crear referencia' }));
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(await screen.findByText('Ingresá un concepto.')).toBeInTheDocument();
+    expect(await screen.findByText('Ingresa un concepto.')).toBeInTheDocument();
     expect(
-      screen.getByText('Ingresá un monto válido con hasta dos decimales.'),
+      screen.getByText('Ingresa un monto válido con hasta dos decimales.'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('Ingresá una fecha y hora de vencimiento válida.'),
+      screen.getByText('Ingresa una fecha y hora de vencimiento válida.'),
     ).toBeInTheDocument();
   });
 
@@ -122,7 +122,7 @@ describe('CreateReferenceForm', () => {
 
     await user.click(screen.getByRole('button', { name: 'Crear referencia' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No pudimos crear la referencia. Revisá los datos o reintentá.',
+      'No pudimos crear la referencia. Revisa los datos o inténtalo de nuevo.',
     );
 
     await user.click(screen.getByRole('button', { name: 'Crear referencia' }));

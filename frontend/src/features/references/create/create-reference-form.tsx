@@ -25,7 +25,7 @@ const defaultValues = (): CreateReferenceFormValues => ({
 
 const errorMessageByCode: Record<string, string> = {
   IDEMPOTENCY_CONFLICT:
-    'Ya existe un intento con esa clave para otro payload. Reiniciá el formulario para generar una intención nueva.',
+    'Ya existe un intento con esa clave para otro payload. Reinicia el formulario para generar una intención nueva.',
   INVALID_DUE_DATE: 'La fecha de vencimiento debe estar en el futuro.',
 };
 
@@ -62,7 +62,7 @@ export function CreateReferenceForm() {
       <section className="card stack create-card" aria-labelledby="create-reference-title">
         <div className="stack stack-sm">
           <p className="muted-copy">
-            Completá los datos para generar una nueva referencia de pago.
+            Completa los datos para generar una nueva referencia de pago.
           </p>
         </div>
 
@@ -74,7 +74,7 @@ export function CreateReferenceForm() {
 
         {intent ? (
           <div className="notice" role="status" aria-live="polite">
-            Si reintentás este envío sin cambiar la intención, vamos a reutilizar la
+            Si vuelves a intentar este envío sin cambiar la intención, vamos a reutilizar la
             misma protección contra duplicados.
           </div>
         ) : null}
@@ -113,10 +113,10 @@ export function CreateReferenceForm() {
               if (error instanceof ApiClientError) {
                 setFeedback(
                   errorMessageByCode[error.code] ??
-                    'No pudimos crear la referencia. Revisá los datos o reintentá.',
+                    'No pudimos crear la referencia. Revisa los datos o inténtalo de nuevo.',
                 );
               } else {
-                setFeedback('No pudimos crear la referencia. Revisá los datos o reintentá.');
+                setFeedback('No pudimos crear la referencia. Revisa los datos o inténtalo de nuevo.');
               }
             } finally {
               setIsSubmitting(false);

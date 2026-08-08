@@ -111,7 +111,7 @@ describe('ReferenceWorkspace', () => {
 
     expect(await screen.findByText('No hay referencias para mostrar')).toBeInTheDocument();
     expect(
-      screen.getByText('Probá ajustar la búsqueda o limpiar los filtros.'),
+      screen.getByText('Intenta ajustar la búsqueda o limpiar los filtros.'),
     ).toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe('ReferenceWorkspace', () => {
     render(<ReferenceWorkspace />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No pudimos cargar las referencias. Probá nuevamente.',
+      'No pudimos cargar las referencias. Inténtalo de nuevo.',
     );
 
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));

@@ -144,7 +144,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
         setUser(null);
         setStatus('anonymous');
-        setBootstrapError('No pudimos validar tu sesión. Probá nuevamente.');
+        setBootstrapError('No pudimos validar tu sesión. Inténtalo de nuevo.');
         throw error;
       }
     },

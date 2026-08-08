@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import { ApiClientError } from '@/lib/api/errors';
-import { useSession } from '@/lib/session/session-provider';
-import type { ReferenceSummary } from '@/features/references/shared/types';
-import { fetchReferenceList } from './api';
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { ApiClientError } from "@/lib/api/errors";
+import { useSession } from "@/lib/session/session-provider";
+import type { ReferenceSummary } from "@/features/references/shared/types";
+import { fetchReferenceList } from "./api";
 import {
   buildReferenceListSearchParams,
   createInitialReferenceListState,
@@ -15,34 +15,34 @@ import {
   getReferenceListPage,
   parseReferenceListUrlState,
   type ReferenceListUrlState,
-} from './query-state';
+} from "./query-state";
 
 const statusLabel: Record<string, string> = {
-  PENDING: 'Pendiente',
-  PAID: 'Pagada',
-  CANCELLED: 'Cancelada',
-  EXPIRED: 'Expirada',
+  PENDING: "Pendiente",
+  PAID: "Pagada",
+  CANCELLED: "Cancelada",
+  EXPIRED: "Expirada",
 };
 
 const listErrorMessage = (error: ApiClientError) => {
-  if (error.code === 'INVALID_CURSOR') {
-    return 'La página pedida ya no es válida. Volvé a intentar desde el listado.';
+  if (error.code === "INVALID_CURSOR") {
+    return "La página solicitada ya no es válida. Vuelve a intentarlo desde el listado.";
   }
 
-  return 'No pudimos cargar las referencias. Probá nuevamente.';
+  return "No pudimos cargar las referencias. Inténtalo de nuevo.";
 };
 
 const formatMoney = (amount: number, currency: string) =>
-  new Intl.NumberFormat('es-CO', {
-    style: 'currency',
+  new Intl.NumberFormat("es-CO", {
+    style: "currency",
     currency,
     minimumFractionDigits: 2,
   }).format(amount / 100);
 
 const formatDateTime = (value: string) =>
-  new Intl.DateTimeFormat('es-AR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  new Intl.DateTimeFormat("es-AR", {
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(value));
 
 export function ReferenceWorkspace() {
@@ -56,7 +56,8 @@ export function ReferenceWorkspace() {
   }, [pathname, searchParams]);
 
   const urlState = useMemo(
-    () => parseReferenceListUrlState(new URLSearchParams(searchParams.toString())),
+    () =>
+      parseReferenceListUrlState(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
 
@@ -100,7 +101,7 @@ export function ReferenceWorkspace() {
         setErrorMessage(
           error instanceof ApiClientError
             ? listErrorMessage(error)
-            : 'No pudimos cargar las referencias. Probá nuevamente.',
+            : "No pudimos cargar las referencias. Inténtalo de nuevo.",
         );
       })
       .finally(() => {
@@ -135,11 +136,14 @@ export function ReferenceWorkspace() {
   };
 
   const hasActiveFilters = Boolean(
-    urlState.search || urlState.status || urlState.createdFrom || urlState.createdTo,
+    urlState.search ||
+    urlState.status ||
+    urlState.createdFrom ||
+    urlState.createdTo,
   );
   const page = getReferenceListPage(urlState);
   const previousState = getPreviousReferenceListState(urlState);
-  const createdId = searchParams.get('created');
+  const createdId = searchParams.get("created");
   const buildDetailHref = (referenceId: string) =>
     `/references/${referenceId}?returnTo=${encodeURIComponent(currentUrl)}`;
 
@@ -149,12 +153,12 @@ export function ReferenceWorkspace() {
         <div className="stack stack-sm page-heading-copy">
           <p className="eyebrow">Referencias</p>
           <h1 id="workspace-title">Workspace de referencias</h1>
-          <p className="workspace-copy">
-            Consultá, filtrá y seguí el estado de tus referencias sin perder el contexto del listado.
-          </p>
         </div>
 
-        <Link className="primary-link primary-link-with-icon" href="/references/new">
+        <Link
+          className="primary-link primary-link-with-icon"
+          href="/references/new"
+        >
           <PlusIcon />
           Crear referencia
         </Link>
@@ -166,7 +170,10 @@ export function ReferenceWorkspace() {
         </div>
       ) : null}
 
-      <section className="card stack filters-card" aria-labelledby="filters-title">
+      <section
+        className="card stack filters-card"
+        aria-labelledby="filters-title"
+      >
         <div className="stack stack-sm">
           <h2 id="filters-title">Filtros</h2>
         </div>
@@ -203,10 +210,12 @@ export function ReferenceWorkspace() {
                 onChange={(event) =>
                   setDraftState((current) => ({
                     ...current,
-                    status: event.target.value ? (event.target.value as ReferenceListUrlState['status']) : null,
+                    status: event.target.value
+                      ? (event.target.value as ReferenceListUrlState["status"])
+                      : null,
                   }))
                 }
-                value={draftState.status ?? ''}
+                value={draftState.status ?? ""}
               >
                 <option value="">Todos</option>
                 <option value="PENDING">Pendiente</option>
@@ -269,10 +278,17 @@ export function ReferenceWorkspace() {
           </div>
 
           <div className="filters-actions">
-            <button className="secondary-button secondary-button-outline" onClick={resetFilters} type="button">
+            <button
+              className="secondary-button secondary-button-outline"
+              onClick={resetFilters}
+              type="button"
+            >
               Limpiar
             </button>
-            <button className="primary-button primary-button-dark" type="submit">
+            <button
+              className="primary-button primary-button-dark"
+              type="submit"
+            >
               <FilterIcon />
               <span>Aplicar filtros</span>
             </button>
@@ -280,21 +296,29 @@ export function ReferenceWorkspace() {
         </form>
       </section>
 
-      <section className="card stack results-card" aria-labelledby="results-title">
+      <section
+        className="card stack results-card"
+        aria-labelledby="results-title"
+      >
         <div className="workspace-results-header">
           <div className="stack stack-sm">
             <h2 id="results-title">Resultados</h2>
             <p className="muted-copy">
-              Página {page} · {items.length} resultado{items.length === 1 ? '' : 's'}
+              Página {page} · {items.length} resultado
+              {items.length === 1 ? "" : "s"}
             </p>
           </div>
           <div className="pagination-summary" aria-live="polite">
-            {hasActiveFilters ? 'Vista filtrada' : 'Vista completa'}
+            {hasActiveFilters ? "Vista filtrada" : "Vista completa"}
           </div>
         </div>
 
         {errorMessage ? (
-          <div className="error-banner stack stack-sm" role="alert" aria-live="polite">
+          <div
+            className="error-banner stack stack-sm"
+            role="alert"
+            aria-live="polite"
+          >
             <span>{errorMessage}</span>
             <button
               className="secondary-button"
@@ -317,8 +341,8 @@ export function ReferenceWorkspace() {
             <h3>No hay referencias para mostrar</h3>
             <p>
               {hasActiveFilters
-                ? 'Probá ajustar la búsqueda o limpiar los filtros.'
-                : 'Todavía no creaste referencias. Podés cargar la primera ahora mismo.'}
+                ? "Intenta ajustar la búsqueda o limpiar los filtros."
+                : "Todavía no has creado referencias. Puedes registrar la primera ahora mismo."}
             </p>
             {!hasActiveFilters ? (
               <Link className="primary-link" href="/references/new">
@@ -332,7 +356,9 @@ export function ReferenceWorkspace() {
           <>
             <div className="workspace-table-wrap" aria-busy={isLoading}>
               <table className="workspace-table">
-                <caption className="sr-only">Listado de referencias paginado</caption>
+                <caption className="sr-only">
+                  Listado de referencias paginado
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col">Concepto</th>
@@ -347,18 +373,22 @@ export function ReferenceWorkspace() {
                   {items.map((item) => (
                     <tr key={item.id}>
                       <td>
-                       <div className="table-primary">{item.concept}</div>
-                       <div className="table-secondary">{item.externalReference ?? 'Sin referencia externa'}</div>
-                       <Link
-                         aria-label={`Ver detalle de ${item.concept}`}
-                         className="text-link table-detail-link"
-                         href={buildDetailHref(item.id)}
-                       >
-                         Ver detalle
-                       </Link>
+                        <div className="table-primary">{item.concept}</div>
+                        <div className="table-secondary">
+                          {item.externalReference ?? "Sin referencia externa"}
+                        </div>
+                        <Link
+                          aria-label={`Ver detalle de ${item.concept}`}
+                          className="text-link table-detail-link"
+                          href={buildDetailHref(item.id)}
+                        >
+                          Ver detalle
+                        </Link>
                       </td>
                       <td>
-                        <span className={`status-pill status-${item.status.toLowerCase()}`}>
+                        <span
+                          className={`status-pill status-${item.status.toLowerCase()}`}
+                        >
                           {statusLabel[item.status]}
                         </span>
                       </td>
@@ -372,13 +402,18 @@ export function ReferenceWorkspace() {
               </table>
             </div>
 
-            <div className="reference-card-list" aria-label="Listado móvil de referencias">
+            <div
+              className="reference-card-list"
+              aria-label="Listado móvil de referencias"
+            >
               {items.map((item) => (
                 <article className="reference-card" key={item.id}>
                   <div className="stack stack-sm">
                     <div className="reference-card-header">
                       <strong>{item.concept}</strong>
-                      <span className={`status-pill status-${item.status.toLowerCase()}`}>
+                      <span
+                        className={`status-pill status-${item.status.toLowerCase()}`}
+                      >
                         {statusLabel[item.status]}
                       </span>
                     </div>
@@ -401,7 +436,9 @@ export function ReferenceWorkspace() {
                       </div>
                       <div>
                         <dt>Referencia externa</dt>
-                        <dd>{item.externalReference ?? 'Sin referencia externa'}</dd>
+                        <dd>
+                          {item.externalReference ?? "Sin referencia externa"}
+                        </dd>
                       </div>
                     </dl>
                     <Link
@@ -418,7 +455,11 @@ export function ReferenceWorkspace() {
           </>
         ) : null}
 
-        <div className="pagination-actions" role="navigation" aria-label="Paginación del listado">
+        <div
+          className="pagination-actions"
+          role="navigation"
+          aria-label="Paginación del listado"
+        >
           <button
             className="secondary-button"
             disabled={!previousState || isLoading}
@@ -430,7 +471,10 @@ export function ReferenceWorkspace() {
           <button
             className="secondary-button"
             disabled={!nextCursor || isLoading}
-            onClick={() => nextCursor && updateUrl(getNextReferenceListState(urlState, nextCursor))}
+            onClick={() =>
+              nextCursor &&
+              updateUrl(getNextReferenceListState(urlState, nextCursor))
+            }
             type="button"
           >
             Página siguiente
@@ -444,7 +488,10 @@ export function ReferenceWorkspace() {
 function PlusIcon() {
   return (
     <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-      <path d="M12 5.25a.75.75 0 0 1 .75.75v5.25H18a.75.75 0 0 1 0 1.5h-5.25V18a.75.75 0 0 1-1.5 0v-5.25H6a.75.75 0 0 1 0-1.5h5.25V6a.75.75 0 0 1 .75-.75Z" fill="currentColor" />
+      <path
+        d="M12 5.25a.75.75 0 0 1 .75.75v5.25H18a.75.75 0 0 1 0 1.5h-5.25V18a.75.75 0 0 1-1.5 0v-5.25H6a.75.75 0 0 1 0-1.5h5.25V6a.75.75 0 0 1 .75-.75Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
@@ -452,7 +499,10 @@ function PlusIcon() {
 function FilterIcon() {
   return (
     <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-      <path d="M4.75 6A.75.75 0 0 1 5.5 5.25h13a.75.75 0 0 1 .53 1.28l-5.28 5.28v5.44a.75.75 0 0 1-1.17.62l-2.5-1.75a.75.75 0 0 1-.33-.62v-3.69L4.97 6.53A.75.75 0 0 1 4.75 6Z" fill="currentColor" />
+      <path
+        d="M4.75 6A.75.75 0 0 1 5.5 5.25h13a.75.75 0 0 1 .53 1.28l-5.28 5.28v5.44a.75.75 0 0 1-1.17.62l-2.5-1.75a.75.75 0 0 1-.33-.62v-3.69L4.97 6.53A.75.75 0 0 1 4.75 6Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }

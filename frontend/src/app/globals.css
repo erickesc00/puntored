@@ -675,6 +675,70 @@ button {
   padding: 16px;
 }
 
+.detail-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(6px);
+}
+
+.detail-confirm-dialog {
+  width: min(100%, 540px);
+  padding: 24px;
+  background: #ffffff;
+  border-color: var(--color-border);
+  box-shadow: 0 12px 16px rgba(10, 17, 40, 0.1);
+}
+
+.detail-confirm-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-confirm-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  background: #fee2e2;
+  color: #ef4444;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.detail-confirm-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.detail-confirm-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-confirm-copy h2,
+.detail-confirm-copy p {
+  margin: 0;
+}
+
+.detail-confirm-actions {
+  width: 100%;
+  justify-content: stretch;
+  gap: 12px;
+}
+
+.detail-confirm-actions > button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .danger-button {
   background: #bf2433;
   color: #ffffff;
@@ -796,6 +860,26 @@ button {
     width: 100%;
     padding-top: 0;
     justify-content: flex-start;
+  }
+
+  .detail-confirm-overlay {
+    align-items: flex-end;
+    padding: 16px;
+  }
+
+  .detail-confirm-dialog {
+    width: 100%;
+    padding: 20px;
+    border-radius: 20px 20px 16px 16px;
+  }
+
+  .detail-confirm-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .detail-confirm-actions > button {
+    width: 100%;
   }
 
   .filters-actions {

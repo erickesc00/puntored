@@ -1,6 +1,6 @@
 'use client';
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReferenceDetailView } from './reference-detail-view';
@@ -194,6 +194,44 @@ describe('ReferenceDetailView', () => {
     expect(screen.getAllByText('Cancelada').length).toBeGreaterThan(0);
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('CANCEL REFERENCE · SUCCESS')).toBeInTheDocument();
+  });
+
+  it('renders the cancel confirmation as an accessible dialog and closes it with Escape', async () => {
+    sessionUserMock.mockReturnValue({
+      userId: 'u-2',
+      username: 'supervisor',
+      role: 'SUPERVISOR',
+    });
+
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      jsonResponse(200, {
+        reference: buildReference({ version: 4 }),
+        history: [buildHistory()],
+      }),
+    );
+
+    const user = userEvent.setup();
+
+    render(<ReferenceDetailView referenceId="ref-1" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar referencia' }));
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Cancelar referencia de pago' });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Volver' })).toHaveFocus();
+    expect(
+      within(dialog).getByText(
+        'Esta acción inhabilitará permanentemente la referencia. ¿Estás seguro de continuar?',
+      ),
+    ).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('alertdialog', { name: 'Cancelar referencia de pago' }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it('refetches after a version conflict and retries with the latest version', async () => {

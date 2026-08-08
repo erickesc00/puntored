@@ -206,7 +206,7 @@ describe('ProtectedRouteGate', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No pudimos validar tu sesión. Probá nuevamente.',
+      'No pudimos validar tu sesión. Inténtalo de nuevo.',
     );
 
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));

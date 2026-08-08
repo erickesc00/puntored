@@ -35,10 +35,10 @@ describe('validateCreateReference', () => {
 
     expect(result.payload).toBeNull();
     expect(result.errors).toEqual({
-      concept: 'Ingresá un concepto.',
-      amount: 'Ingresá un monto válido con hasta dos decimales.',
-      currency: 'Ingresá una moneda de tres letras, por ejemplo COP.',
-      dueDate: 'Ingresá una fecha y hora de vencimiento válida.',
+      concept: 'Ingresa un concepto.',
+      amount: 'Ingresa un monto válido con hasta dos decimales.',
+      currency: 'Ingresa una moneda de tres letras, por ejemplo COP.',
+      dueDate: 'Ingresa una fecha y hora de vencimiento válida.',
     });
   });
 });

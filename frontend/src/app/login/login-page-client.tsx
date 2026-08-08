@@ -1,37 +1,41 @@
-'use client';
+"use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { ApiClientError } from '@/lib/api/errors';
-import { useSession } from '@/lib/session/session-provider';
-import styles from './login-page-client.module.css';
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ApiClientError } from "@/lib/api/errors";
+import { useSession } from "@/lib/session/session-provider";
+import styles from "./login-page-client.module.css";
 
 const reasonMessageByCode: Record<string, string> = {
-  expired: 'Tu sesión venció. Volvé a iniciar sesión para continuar.',
-  required: 'Necesitás iniciar sesión para continuar.',
+  expired: "Tu sesión venció. Vuelve a iniciar sesión para continuar.",
+  required: "Necesitas iniciar sesión para continuar.",
 };
 
 export function LoginPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, refreshSession, status, user } = useSession();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const returnTo = useMemo(() => {
-    const requested = searchParams.get('returnTo');
+    const requested = searchParams.get("returnTo");
 
-    if (!requested || !requested.startsWith('/') || requested.startsWith('//')) {
-      return '/references';
+    if (
+      !requested ||
+      !requested.startsWith("/") ||
+      requested.startsWith("//")
+    ) {
+      return "/references";
     }
 
     return requested;
   }, [searchParams]);
 
-  const reasonCode = searchParams.get('reason') ?? '';
+  const reasonCode = searchParams.get("reason") ?? "";
 
   useEffect(() => {
     if (user) {
@@ -39,7 +43,7 @@ export function LoginPageClient() {
       return;
     }
 
-    if (status === 'idle') {
+    if (status === "idle") {
       void refreshSession({ redirectOnAuthLoss: false });
     }
   }, [refreshSession, returnTo, router, status, user]);
@@ -54,12 +58,12 @@ export function LoginPageClient() {
     } catch (error) {
       if (error instanceof ApiClientError) {
         setErrorMessage(
-          error.code === 'INVALID_CREDENTIALS'
-            ? 'Credenciales inválidas.'
-            : 'No pudimos iniciar sesión. Probá nuevamente.',
+          error.code === "INVALID_CREDENTIALS"
+            ? "Credenciales inválidas."
+            : "No pudimos iniciar sesión. Inténtalo de nuevo.",
         );
       } else {
-        setErrorMessage('No pudimos iniciar sesión. Probá nuevamente.');
+        setErrorMessage("No pudimos iniciar sesión. Inténtalo de nuevo.");
       }
     } finally {
       setIsSubmitting(false);
@@ -76,11 +80,8 @@ export function LoginPageClient() {
           <p className={styles.badge}>GESTOR DE REFERENCIAS</p>
           <div className={styles.headingGroup}>
             <h1 id="login-title" className={styles.title}>
-              Ingresá a tu cuenta
+              Ingresa a tu cuenta
             </h1>
-            <p className={styles.subtitle}>
-              Accedé con tu usuario interno para continuar con la gestión de referencias.
-            </p>
           </div>
         </div>
 
@@ -109,7 +110,7 @@ export function LoginPageClient() {
                 name="username"
                 autoComplete="username"
                 onChange={(event) => setUsername(event.target.value)}
-                placeholder="Ingresá tu usuario"
+                placeholder="Ingresa tu usuario"
                 required
                 value={username}
               />
@@ -128,13 +129,17 @@ export function LoginPageClient() {
                 name="password"
                 autoComplete="current-password"
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Ingresá tu contraseña"
+                placeholder="Ingresa tu contraseña"
                 required
-                type={isPasswordVisible ? 'text' : 'password'}
+                type={isPasswordVisible ? "text" : "password"}
                 value={password}
               />
               <button
-                aria-label={isPasswordVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-label={
+                  isPasswordVisible
+                    ? "Ocultar contraseña"
+                    : "Mostrar contraseña"
+                }
                 className={styles.trailingIconButton}
                 onClick={() => setIsPasswordVisible((current) => !current)}
                 type="button"
@@ -144,8 +149,12 @@ export function LoginPageClient() {
             </span>
           </label>
 
-          <button className={styles.submitButton} disabled={isSubmitting} type="submit">
-            {isSubmitting ? 'Ingresando...' : 'Ingresar'}
+          <button
+            className={styles.submitButton}
+            disabled={isSubmitting}
+            type="submit"
+          >
+            {isSubmitting ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
       </section>

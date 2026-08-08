@@ -1,42 +1,42 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { cancelReference } from '@/features/references/cancel/api';
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cancelReference } from "@/features/references/cancel/api";
 import type {
   ReferenceAuditEntry,
   ReferenceDetailResponse,
   ReferenceSummary,
-} from '@/features/references/shared/types';
-import { ApiClientError } from '@/lib/api/errors';
-import { useSession } from '@/lib/session/session-provider';
-import { fetchReferenceDetail } from './api';
+} from "@/features/references/shared/types";
+import { ApiClientError } from "@/lib/api/errors";
+import { useSession } from "@/lib/session/session-provider";
+import { fetchReferenceDetail } from "./api";
 
-type FeedbackTone = 'error' | 'status';
+type FeedbackTone = "error" | "status";
 
 interface FeedbackState {
   message: string;
   tone: FeedbackTone;
 }
 
-const DEFAULT_RETURN_TO = '/references';
+const DEFAULT_RETURN_TO = "/references";
 
 const statusLabel: Record<string, string> = {
-  PENDING: 'Pendiente',
-  PAID: 'Pagada',
-  CANCELLED: 'Cancelada',
-  EXPIRED: 'Expirada',
+  PENDING: "Pendiente",
+  PAID: "Pagada",
+  CANCELLED: "Cancelada",
+  EXPIRED: "Expirada",
 };
 
 const cancelConflictCodes = new Set([
-  'REFERENCE_VERSION_CONFLICT',
-  'INVALID_REFERENCE_STATE',
-  'REFERENCE_EXPIRED',
+  "REFERENCE_VERSION_CONFLICT",
+  "INVALID_REFERENCE_STATE",
+  "REFERENCE_EXPIRED",
 ]);
 
 const sanitizeReturnTo = (value: string | null) => {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return DEFAULT_RETURN_TO;
   }
 
@@ -44,23 +44,23 @@ const sanitizeReturnTo = (value: string | null) => {
 };
 
 const formatMoney = (amount: number, currency: string) =>
-  new Intl.NumberFormat('es-CO', {
-    style: 'currency',
+  new Intl.NumberFormat("es-CO", {
+    style: "currency",
     currency,
     minimumFractionDigits: 2,
   }).format(amount / 100);
 
 const formatDateTime = (value: string) =>
-  new Intl.DateTimeFormat('es-AR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  new Intl.DateTimeFormat("es-AR", {
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(value));
 
 const canCancelReference = (reference: ReferenceSummary) =>
-  reference.status === 'PENDING';
+  reference.status === "PENDING";
 
 const formatHistoryTitle = (entry: ReferenceAuditEntry) =>
-  `${entry.action.replaceAll('_', ' ')} · ${entry.result.replaceAll('_', ' ')}`;
+  `${entry.action.replaceAll("_", " ")} · ${entry.result.replaceAll("_", " ")}`;
 
 const formatActor = (entry: ReferenceAuditEntry) => {
   if (!entry.actorId) {
@@ -71,11 +71,11 @@ const formatActor = (entry: ReferenceAuditEntry) => {
 };
 
 const detailErrorMessage = (error: ApiClientError) => {
-  if (error.code === 'REFERENCE_NOT_FOUND') {
-    return 'La referencia que buscás ya no existe o no está disponible.';
+  if (error.code === "REFERENCE_NOT_FOUND") {
+    return "La referencia que buscas ya no existe o no está disponible.";
   }
 
-  return 'No pudimos cargar el detalle de la referencia. Probá nuevamente.';
+  return "No pudimos cargar el detalle de la referencia. Inténtalo de nuevo.";
 };
 
 export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
@@ -89,6 +89,7 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
   const [isNotFound, setIsNotFound] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const cancelDialogDismissButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const currentUrl = useMemo(() => {
     const query = searchParams.toString();
@@ -96,7 +97,7 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
   }, [pathname, searchParams]);
 
   const returnTo = useMemo(
-    () => sanitizeReturnTo(searchParams.get('returnTo')),
+    () => sanitizeReturnTo(searchParams.get("returnTo")),
     [searchParams],
   );
 
@@ -120,7 +121,7 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
 
         if (
           error instanceof ApiClientError &&
-          (error.statusCode === 404 || error.code === 'REFERENCE_NOT_FOUND')
+          (error.statusCode === 404 || error.code === "REFERENCE_NOT_FOUND")
         ) {
           setIsNotFound(true);
           return;
@@ -129,7 +130,7 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
         setErrorMessage(
           error instanceof ApiClientError
             ? detailErrorMessage(error)
-            : 'No pudimos cargar el detalle de la referencia. Probá nuevamente.',
+            : "No pudimos cargar el detalle de la referencia. Inténtalo de nuevo.",
         );
       } finally {
         setIsLoading(false);
@@ -142,7 +143,27 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
     void loadDetail();
   }, [loadDetail]);
 
-  const isSupervisor = user?.role?.toUpperCase() === 'SUPERVISOR';
+  useEffect(() => {
+    if (!isConfirmingCancel) {
+      return;
+    }
+
+    cancelDialogDismissButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isCancelling) {
+        setIsConfirmingCancel(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCancelling, isConfirmingCancel]);
+
+  const isSupervisor = user?.role?.toUpperCase() === "SUPERVISOR";
   const canCancel = Boolean(
     detail && isSupervisor && canCancelReference(detail.reference),
   );
@@ -158,9 +179,9 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
       await cancelReference(detail.reference.id, detail.reference.version);
       setIsConfirmingCancel(false);
       await loadDetail({
-        tone: 'status',
+        tone: "status",
         message:
-          'Referencia cancelada correctamente. Refrescamos el detalle con la última versión.',
+          "Referencia cancelada correctamente. Refrescamos el detalle con la última versión.",
       });
     } catch (error) {
       if (handleSessionError(error, currentUrl)) {
@@ -174,19 +195,19 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
       ) {
         setIsConfirmingCancel(false);
         await loadDetail({
-          tone: 'status',
+          tone: "status",
           message:
-            'La referencia cambió antes de completar la cancelación. Ya refrescamos el detalle con la última versión.',
+            "La referencia cambió antes de completar la cancelación. Ya refrescamos el detalle con la última versión.",
         });
         return;
       }
 
       setFeedback({
-        tone: 'error',
+        tone: "error",
         message:
           error instanceof ApiClientError
-            ? 'No pudimos cancelar la referencia. Probá nuevamente.'
-            : 'No pudimos cancelar la referencia. Probá nuevamente.',
+            ? "No pudimos cancelar la referencia. Inténtalo de nuevo."
+            : "No pudimos cancelar la referencia. Inténtalo de nuevo.",
       });
     } finally {
       setIsCancelling(false);
@@ -196,7 +217,11 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
   if (isLoading && !detail && !errorMessage && !isNotFound) {
     return (
       <main className="detail-page-shell">
-        <section className="card stack" aria-busy="true" aria-labelledby="detail-loading-title">
+        <section
+          className="card stack"
+          aria-busy="true"
+          aria-labelledby="detail-loading-title"
+        >
           <h1 id="detail-loading-title">Cargando detalle...</h1>
           <p role="status">Estamos trayendo la referencia y su historial.</p>
         </section>
@@ -207,17 +232,25 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
   if (isNotFound) {
     return (
       <main className="detail-page-shell">
-        <section className="card stack" aria-labelledby="detail-not-found-title">
+        <section
+          className="card stack"
+          aria-labelledby="detail-not-found-title"
+        >
           <p className="eyebrow">Detalle</p>
           <h1 id="detail-not-found-title">Referencia no encontrada</h1>
           <p className="muted-copy">
-            La referencia que abriste ya no existe o cambió antes de que pudieras verla.
+            La referencia que abriste ya no existe o cambió antes de que
+            pudieras verla.
           </p>
           <div className="detail-actions">
             <Link className="text-link" href={returnTo}>
               Volver al listado
             </Link>
-            <button className="secondary-button" onClick={() => void loadDetail()} type="button">
+            <button
+              className="secondary-button"
+              onClick={() => void loadDetail()}
+              type="button"
+            >
               Reintentar
             </button>
           </div>
@@ -233,13 +266,18 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
           <p className="eyebrow">Detalle</p>
           <h1 id="detail-error-title">No pudimos abrir la referencia</h1>
           <div className="error-banner" role="alert" aria-live="polite">
-            {errorMessage ?? 'No pudimos cargar el detalle de la referencia. Probá nuevamente.'}
+            {errorMessage ??
+              "No pudimos cargar el detalle de la referencia. Inténtalo de nuevo."}
           </div>
           <div className="detail-actions">
             <Link className="text-link" href={returnTo}>
               Volver al listado
             </Link>
-            <button className="secondary-button" onClick={() => void loadDetail()} type="button">
+            <button
+              className="secondary-button"
+              onClick={() => void loadDetail()}
+              type="button"
+            >
               Reintentar
             </button>
           </div>
@@ -264,7 +302,8 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
           <p className="eyebrow">Detalle</p>
           <h1>{reference.concept}</h1>
           <p className="workspace-copy">
-            Revisá el estado efectivo, la versión actual y la auditoría asociada a la referencia.
+            Revisa el estado efectivo, la versión actual y la auditoría asociada
+            a la referencia.
           </p>
         </div>
 
@@ -279,7 +318,7 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
               }}
               type="button"
             >
-              {isCancelling ? 'Cancelando...' : 'Cancelar referencia'}
+              {isCancelling ? "Cancelando..." : "Cancelar referencia"}
             </button>
           </div>
         ) : null}
@@ -287,8 +326,10 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
 
       {feedback ? (
         <div
-          className={feedback.tone === 'error' ? 'error-banner' : 'status-banner'}
-          role={feedback.tone === 'error' ? 'alert' : 'status'}
+          className={
+            feedback.tone === "error" ? "error-banner" : "status-banner"
+          }
+          role={feedback.tone === "error" ? "alert" : "status"}
           aria-live="polite"
         >
           {feedback.message}
@@ -302,61 +343,70 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
       ) : null}
 
       {isSupervisor && isConfirmingCancel ? (
-        <div
-          className="confirm-panel stack"
-          role="alertdialog"
-          aria-labelledby="cancel-dialog-title"
-          aria-describedby="cancel-dialog-copy"
-        >
-          <h2 id="cancel-dialog-title">Confirmar cancelación</h2>
-          <p id="cancel-dialog-copy">
-            Vamos a cancelar la referencia usando la versión <strong>{reference.version}</strong>. Si
-            alguien cambió el estado antes, refrescaremos el detalle para mostrar la última versión
-            disponible.
-          </p>
-          <div className="detail-actions">
-            <button
-              className="danger-button"
-              disabled={isCancelling}
-              onClick={() => void handleCancelConfirmation()}
-              type="button"
-            >
-              {isCancelling ? 'Cancelando...' : 'Confirmar cancelación'}
-            </button>
-            <button
-              className="secondary-button secondary-button-outline"
-              disabled={isCancelling}
-              onClick={() => setIsConfirmingCancel(false)}
-              type="button"
-            >
-              Volver
-            </button>
+        <div className="detail-confirm-overlay" role="presentation">
+          <div
+            className="confirm-panel detail-confirm-dialog stack"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="cancel-dialog-title"
+            aria-describedby="cancel-dialog-copy"
+          >
+            <div className="detail-confirm-dialog-header">
+              <div className="detail-confirm-icon" aria-hidden="true">
+                <WarningIcon />
+              </div>
+              <div className="stack stack-sm detail-confirm-copy">
+                <h2 id="cancel-dialog-title">Cancelar referencia de pago</h2>
+                <p id="cancel-dialog-copy">
+                  Esta acción inhabilitará permanentemente la referencia. ¿Estás
+                  seguro de continuar?
+                </p>
+              </div>
+            </div>
+            <div className="detail-actions detail-confirm-actions">
+              <button
+                ref={cancelDialogDismissButtonRef}
+                className="secondary-button secondary-button-outline"
+                disabled={isCancelling}
+                onClick={() => setIsConfirmingCancel(false)}
+                type="button"
+              >
+                Volver
+              </button>
+              <button
+                className="primary-button"
+                disabled={isCancelling}
+                onClick={() => void handleCancelConfirmation()}
+                type="button"
+              >
+                {isCancelling ? "Cancelando..." : "Confirmar cancelación"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
 
       <div className="detail-layout">
         <div className="detail-column stack">
-          <section className="card stack" aria-labelledby="reference-summary-title">
+          <section
+            className="card stack"
+            aria-labelledby="reference-summary-title"
+          >
             <div className="workspace-results-header">
-              <h2 id="reference-summary-title">Resumen de Referencia</h2>
-              <span className={`status-pill status-${reference.status.toLowerCase()}`}>
+              <h2 id="reference-summary-title">Resumen de referencia</h2>
+              <span
+                className={`status-pill status-${reference.status.toLowerCase()}`}
+              >
                 {statusLabel[reference.status]}
               </span>
             </div>
 
             <dl className="detail-summary-list">
               <div>
-                <dt>Estado</dt>
-                <dd>{statusLabel[reference.status]}</dd>
-              </div>
-              <div>
-                <dt>Versión actual</dt>
-                <dd>{reference.version}</dd>
-              </div>
-              <div>
                 <dt>Referencia externa</dt>
-                <dd>{reference.externalReference ?? 'Sin referencia externa'}</dd>
+                <dd>
+                  {reference.externalReference ?? "Sin referencia externa"}
+                </dd>
               </div>
               <div>
                 <dt>Monto</dt>
@@ -376,18 +426,20 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
               </div>
               <div>
                 <dt>Creada por</dt>
-                <dd>{reference.createdBy.username ?? reference.createdBy.id}</dd>
+                <dd>
+                  {reference.createdBy.username ?? reference.createdBy.id}
+                </dd>
               </div>
             </dl>
           </section>
         </div>
 
-        <section className="card stack history-card" aria-labelledby="reference-history-title">
+        <section
+          className="card stack history-card"
+          aria-labelledby="reference-history-title"
+        >
           <div className="stack stack-sm">
             <h2 id="reference-history-title">Historial y auditoría</h2>
-            <p className="muted-copy">
-              Cada entrada muestra quién actuó, qué ocurrió y cuándo quedó registrado.
-            </p>
           </div>
 
           <div className="history-list" role="list">
@@ -397,14 +449,16 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
                 <div className="history-item-copy">
                   <div className="history-item-title-row">
                     <strong>{formatHistoryTitle(entry)}</strong>
-                    <span className="history-timestamp">{formatDateTime(entry.createdAt)}</span>
+                    <span className="history-timestamp">
+                      {formatDateTime(entry.createdAt)}
+                    </span>
                   </div>
                   <div className="history-item-meta-row">
                     <span>{formatActor(entry)}</span>
                     <span className="history-meta-separator" aria-hidden="true">
                       •
                     </span>
-                    <span>Correlation ID: {entry.correlationId ?? '—'}</span>
+                    <span>Correlation ID: {entry.correlationId ?? "—"}</span>
                   </div>
                 </div>
               </article>
@@ -419,7 +473,21 @@ export function ReferenceDetailView({ referenceId }: { referenceId: string }) {
 function BackIcon() {
   return (
     <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-      <path d="M10.78 5.47a.75.75 0 0 1 0 1.06L6.31 11h11.94a.75.75 0 0 1 0 1.5H6.31l4.47 4.47a.75.75 0 1 1-1.06 1.06l-5.75-5.75a.75.75 0 0 1 0-1.06l5.75-5.75a.75.75 0 0 1 1.06 0Z" fill="currentColor" />
+      <path
+        d="M10.78 5.47a.75.75 0 0 1 0 1.06L6.31 11h11.94a.75.75 0 0 1 0 1.5H6.31l4.47 4.47a.75.75 0 1 1-1.06 1.06l-5.75-5.75a.75.75 0 0 1 0-1.06l5.75-5.75a.75.75 0 0 1 1.06 0Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function WarningIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path
+        d="M12 3.75c.4 0 .77.21.98.56l7.5 12.75a1.13 1.13 0 0 1-.98 1.69H4.5a1.13 1.13 0 0 1-.98-1.69l7.5-12.75c.21-.35.58-.56.98-.56Zm0 4.5a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0V9a.75.75 0 0 0-.75-.75Zm0 8.63a.94.94 0 1 0 0-1.88.94.94 0 0 0 0 1.88Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
