@@ -7,11 +7,14 @@ import { AppConfigService } from '../../src/common/config/app-config.service';
 import { HttpExceptionFilter } from '../../src/common/filters/http-exception.filter';
 import { CorrelationIdMiddleware } from '../../src/common/middleware/correlation-id.middleware';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
+import { ReferenceExpirationService } from '../../src/modules/references/reference-expiration.service';
 import { applyTestEnvironment, ensureTestDatabaseReady } from './mysql-test-db';
 
-export async function createRealTestApp() {
-  applyTestEnvironment();
-  await ensureTestDatabaseReady();
+export async function createRealTestApp(options?: {
+  referenceExpirationEnabled?: boolean;
+}) {
+  applyTestEnvironment(options);
+  await ensureTestDatabaseReady(options);
 
   const { AppModule } = await import('../../src/app.module');
   const moduleFixture = await Test.createTestingModule({
@@ -51,5 +54,6 @@ export async function createRealTestApp() {
   return {
     app,
     prisma: app.get(PrismaService),
+    referenceExpirationService: app.get(ReferenceExpirationService),
   };
 }
