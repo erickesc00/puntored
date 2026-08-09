@@ -32,6 +32,11 @@ export const appEnvSchema = z.object({
   BCRYPT_ROUNDS: toNumber(10),
   LOGIN_RATE_LIMIT_TTL_SECONDS: toNumber(60),
   LOGIN_RATE_LIMIT_LIMIT: toNumber(5),
+  PROVIDER_ALLOCATION_ENABLED: toBoolean(false),
+  PROVIDER_STUB_BASE_URL: z.string().url().default('http://localhost:3002'),
+  PROVIDER_STUB_API_KEY: z.string().min(8).default('change-this-stub-api-key'),
+  PROVIDER_CALLBACK_BASE_URL: z.string().url().default('http://localhost:3000'),
+  PROVIDER_ALLOCATION_TIMEOUT_MS: toNumber(3000),
   PROVIDER_SHARED_SECRET: z
     .string()
     .min(16)

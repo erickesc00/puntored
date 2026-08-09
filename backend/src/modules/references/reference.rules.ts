@@ -24,6 +24,19 @@ export interface CancellationEligibilityResult {
 
 export const REFERENCES_IDEMPOTENCY_SCOPE = 'payment-reference:create';
 
+export function buildDeterministicReferenceId(
+  scope: string,
+  actorId: string,
+  idempotencyKey: string,
+) {
+  const suffix = createHash('sha256')
+    .update(`${scope}:${actorId}:${idempotencyKey}`)
+    .digest('hex')
+    .slice(0, 24);
+
+  return `ref_${suffix}`;
+}
+
 export function normalizeConcept(value: string) {
   return value.trim().replace(/\s+/g, ' ');
 }

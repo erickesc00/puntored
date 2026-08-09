@@ -103,7 +103,7 @@ function createJourneyBackend(options?: { expireReferenceList?: boolean }) {
 
       const response: ReferenceSummary = {
         id: `ref-${references.size + 1}`,
-        externalReference: null,
+        externalReference: `EXT-JOURNEY-${String(references.size + 1).padStart(3, '0')}`,
         concept: String(payload?.concept ?? ''),
         amount: Number(payload?.amount ?? 0),
         currency: String(payload?.currency ?? 'COP'),

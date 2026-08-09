@@ -22,7 +22,7 @@ export class ProviderEventsController {
     @Body() body: ProviderCallbackDto,
     @Req() request: Request,
   ) {
-    return this.providerEventsService.processPaidEvent(
+    return this.providerEventsService.processProviderEvent(
       body,
       request.correlationId,
     );

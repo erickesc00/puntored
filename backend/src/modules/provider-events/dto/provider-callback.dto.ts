@@ -24,10 +24,14 @@ export class ProviderCallbackDto {
   externalReference!: string;
 
   @IsString()
-  @IsIn(['PAID'])
-  status!: 'PAID';
+  @IsIn(['PAID', 'CANCELLED'])
+  status!: 'PAID' | 'CANCELLED';
 
   @IsOptional()
   @IsDateString()
   paidAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  occurredAt?: string;
 }

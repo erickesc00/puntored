@@ -73,7 +73,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
         createdBy: operatorUser.id,
         externalReference:
           overrides?.externalReference === undefined
-            ? null
+            ? `EXT-${randomUUID().slice(0, 8).toUpperCase()}`
             : overrides.externalReference,
       },
     });
@@ -108,7 +108,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
   it('marks a pending reference as paid, persists provider idempotency evidence, and exposes provider metrics', async () => {
     const reference = await createPersistedReference();
     const payload = providerPayload(reference.id, {
-      externalReference: 'EXT-PAID-001',
+      externalReference: reference.externalReference,
     });
 
     const response = await request(getHttpServer())
@@ -125,7 +125,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
         id: reference.id,
         status: ReferenceStatus.PAID,
         version: 2,
-        externalReference: 'EXT-PAID-001',
+        externalReference: reference.externalReference,
       },
     });
 
@@ -140,7 +140,9 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
 
     expect(persistedReference.status).toBe(ReferenceStatus.PAID);
     expect(persistedReference.version).toBe(2);
-    expect(persistedReference.externalReference).toBe('EXT-PAID-001');
+    expect(persistedReference.externalReference).toBe(
+      reference.externalReference,
+    );
     expect(providerEvents).toHaveLength(1);
     expect(providerEvents[0]).toMatchObject({
       providerEventId: payload.providerEventId,
@@ -163,7 +165,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
   it('suppresses duplicate provider events and returns a repeat-safe response', async () => {
     const reference = await createPersistedReference();
     const payload = providerPayload(reference.id, {
-      externalReference: 'EXT-DUPLICATE-001',
+      externalReference: reference.externalReference,
     });
 
     await request(getHttpServer())
@@ -212,7 +214,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       .expect(201);
 
     const payload = providerPayload(reference.id, {
-      externalReference: 'EXT-LATE-PAID-001',
+      externalReference: reference.externalReference,
     });
 
     const conflictResponse = await request(getHttpServer())
@@ -251,7 +253,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
     const supervisorCookie = await createSessionCookie(supervisorUser.id);
     const reference = await createPersistedReference();
     const payload = providerPayload(reference.id, {
-      externalReference: 'EXT-RACE-PAID-001',
+      externalReference: reference.externalReference,
     });
 
     const [providerResult, cancelResult] = await Promise.allSettled([
@@ -340,5 +342,128 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
         ),
       ).toBe(true);
     }
+  });
+
+  it('marks a pending reference as cancelled through the provider callback path', async () => {
+    const reference = await createPersistedReference();
+    const payload = providerPayload(reference.id, {
+      externalReference: reference.externalReference,
+      status: 'CANCELLED',
+      paidAt: undefined,
+      occurredAt: new Date().toISOString(),
+    });
+
+    const response = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      providerEventId: payload.providerEventId,
+      outcome: 'SUCCESS',
+      duplicate: false,
+      reference: {
+        id: reference.id,
+        status: ReferenceStatus.CANCELLED,
+        version: 2,
+        externalReference: reference.externalReference,
+      },
+    });
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: reference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.CANCELLED);
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'PROVIDER_EVENT:SUCCESS',
+    ]);
+  });
+
+  it('suppresses duplicate provider cancelled callbacks safely', async () => {
+    const reference = await createPersistedReference();
+    const payload = providerPayload(reference.id, {
+      externalReference: reference.externalReference,
+      status: 'CANCELLED',
+      paidAt: undefined,
+      occurredAt: new Date().toISOString(),
+    });
+
+    await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    const duplicateResponse = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    expect(duplicateResponse.body).toMatchObject({
+      providerEventId: payload.providerEventId,
+      outcome: 'DUPLICATE',
+      duplicate: true,
+      reference: {
+        id: reference.id,
+        status: ReferenceStatus.CANCELLED,
+      },
+    });
+  });
+
+  it('rejects provider cancelled when the reference is already paid', async () => {
+    const reference = await createPersistedReference({
+      status: ReferenceStatus.PAID,
+      version: 2,
+    });
+    const payload = providerPayload(reference.id, {
+      externalReference: reference.externalReference,
+      status: 'CANCELLED',
+      paidAt: undefined,
+      occurredAt: new Date().toISOString(),
+    });
+
+    const conflictResponse = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(409);
+
+    expect(conflictResponse.body.code).toBe('PROVIDER_EVENT_CONFLICT');
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.PAID);
+    expect(persistedReference.version).toBe(2);
+  });
+
+  it('rejects provider callbacks when the external reference mismatches persisted data', async () => {
+    const reference = await createPersistedReference({
+      externalReference: 'EXT-MATCH-001',
+    });
+    const payload = providerPayload(reference.id, {
+      externalReference: 'EXT-OTHER-999',
+      status: 'CANCELLED',
+      paidAt: undefined,
+      occurredAt: new Date().toISOString(),
+    });
+
+    const conflictResponse = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(409);
+
+    expect(conflictResponse.body.code).toBe(
+      'PROVIDER_EXTERNAL_REFERENCE_CONFLICT',
+    );
   });
 });

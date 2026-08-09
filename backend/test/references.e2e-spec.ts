@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { DEMO_REFERENCE_FIXTURES, seedDatabase } from '../prisma/seed';
 import { createRealTestApp } from './helpers/create-real-test-app';
+import { MockProviderStub } from './helpers/mock-provider-stub';
 import { getSeedUsers, resetTestDatabase } from './helpers/mysql-test-db';
 
 describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
@@ -16,14 +17,19 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
   let prisma: PrismaService;
   let operatorUser: Awaited<ReturnType<typeof getSeedUsers>>['operator'];
   let supervisorUser: Awaited<ReturnType<typeof getSeedUsers>>['supervisor'];
+  const providerStub = new MockProviderStub('test-stub-api-key');
 
   beforeAll(async () => {
+    process.env.PROVIDER_STUB_API_KEY = providerStub.apiKey;
+    await providerStub.start();
+    process.env.PROVIDER_STUB_BASE_URL = providerStub.baseUrl;
     const realApp = await createRealTestApp();
     app = realApp.app;
     prisma = realApp.prisma;
   });
 
   beforeEach(async () => {
+    providerStub.reset();
     await resetTestDatabase(prisma);
 
     const seededUsers = await getSeedUsers(prisma);
@@ -35,6 +41,8 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     if (app) {
       await app.close();
     }
+
+    await providerStub.stop();
   });
 
   const getHttpServer = () =>
@@ -102,7 +110,9 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
   };
 
   const getMetricsText = async () => {
-    const response = await request(getHttpServer()).get('/api/metrics').expect(200);
+    const response = await request(getHttpServer())
+      .get('/api/metrics')
+      .expect(200);
     return response.text;
   };
 
@@ -128,6 +138,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
 
     expect(replayResponse.body.id).toBe(firstResponse.body.id);
     expect(replayResponse.body).toMatchObject(firstResponse.body);
+    expect(firstResponse.body.externalReference).toBeTruthy();
 
     const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
       where: { id: firstResponse.body.id as string },
@@ -140,7 +151,11 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
 
     expect(persistedReference.status).toBe(ReferenceStatus.PENDING);
     expect(persistedReference.version).toBe(1);
+    expect(persistedReference.externalReference).toBe(
+      firstResponse.body.externalReference,
+    );
     expect(idempotencyRows).toHaveLength(1);
+    expect(providerStub.listRecords()).toHaveLength(1);
     expect(idempotencyRows[0]).toMatchObject({
       actorId: operatorUser.id,
       idempotencyKey,
@@ -183,6 +198,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     });
 
     expect(paymentReferences).toHaveLength(1);
+    expect(paymentReferences[0]?.externalReference).toBeTruthy();
     expect(idempotencyRows).toHaveLength(1);
     expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
       'CREATE_REFERENCE:SUCCESS',
@@ -193,6 +209,77 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     expect(metricsText).toContain('puntored_reference_create_total');
     expect(metricsText).toContain('outcome="success"');
     expect(metricsText).toContain('outcome="rejected_idempotency_conflict"');
+  });
+
+  it('fails create when provider allocation fails and leaves no local-only reference row', async () => {
+    const operatorCookie = await createSessionCookie(operatorUser.id);
+    providerStub.failNextAllocation(503, {
+      code: 'STUB_DOWN',
+      message: 'Provider stub unavailable',
+    });
+
+    const response = await request(getHttpServer())
+      .post('/api/references')
+      .set('Cookie', operatorCookie)
+      .set('Idempotency-Key', `alloc-failure-${randomUUID()}`)
+      .send(buildCreatePayload({ concept: 'Provider failure case' }))
+      .expect(503);
+
+    expect(response.body.code).toBe('PROVIDER_ALLOCATION_FAILED');
+    expect(await prisma.paymentReference.count()).toBe(0);
+    expect(await prisma.idempotencyKey.count()).toBe(0);
+    expect(providerStub.listRecords()).toHaveLength(0);
+  });
+
+  it('recovers safely when provider allocation succeeds before local persistence fails and the caller retries', async () => {
+    const operatorCookie = await createSessionCookie(operatorUser.id);
+    const idempotencyKey = `retry-after-provider-success-${randomUUID()}`;
+    const payload = buildCreatePayload({
+      concept: 'Retry after local failure',
+    });
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    let firstTransactionAttempt = true;
+
+    const transactionSpy = jest
+      .spyOn(prisma, '$transaction')
+      .mockImplementation((...args: Parameters<typeof prisma.$transaction>) => {
+        if (firstTransactionAttempt) {
+          firstTransactionAttempt = false;
+          return Promise.reject(new Error('forced local persistence failure'));
+        }
+
+        return originalTransaction(...args);
+      });
+
+    await request(getHttpServer())
+      .post('/api/references')
+      .set('Cookie', operatorCookie)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(500);
+
+    const retryResponse = await request(getHttpServer())
+      .post('/api/references')
+      .set('Cookie', operatorCookie)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201);
+
+    expect(providerStub.listRecords()).toHaveLength(1);
+    expect(retryResponse.body.externalReference).toBe(
+      providerStub.listRecords()[0]?.externalReference,
+    );
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: retryResponse.body.id as string },
+    });
+
+    expect(persistedReference.externalReference).toBe(
+      retryResponse.body.externalReference,
+    );
+    expect(await prisma.idempotencyKey.count()).toBe(1);
+
+    transactionSpy.mockRestore();
   });
 
   it('filters the list by persisted status', async () => {
@@ -439,7 +526,9 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     const references = await prisma.paymentReference.findMany({
       where: {
         externalReference: {
-          in: DEMO_REFERENCE_FIXTURES.map((fixture) => fixture.externalReference),
+          in: DEMO_REFERENCE_FIXTURES.map(
+            (fixture) => fixture.externalReference,
+          ),
         },
       },
       orderBy: { externalReference: 'asc' },

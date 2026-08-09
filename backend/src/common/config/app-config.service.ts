@@ -68,6 +68,26 @@ export class AppConfigService {
     };
   }
 
+  get providerAllocation() {
+    return {
+      enabled: this.configService.get('PROVIDER_ALLOCATION_ENABLED', {
+        infer: true,
+      }),
+      baseUrl: this.configService.get('PROVIDER_STUB_BASE_URL', {
+        infer: true,
+      }),
+      apiKey: this.configService.get('PROVIDER_STUB_API_KEY', {
+        infer: true,
+      }),
+      callbackBaseUrl: this.configService.get('PROVIDER_CALLBACK_BASE_URL', {
+        infer: true,
+      }),
+      timeoutMs: this.configService.get('PROVIDER_ALLOCATION_TIMEOUT_MS', {
+        infer: true,
+      }),
+    };
+  }
+
   get provider() {
     return {
       sharedSecret: this.configService.get('PROVIDER_SHARED_SECRET', {
@@ -76,6 +96,7 @@ export class AppConfigService {
       actorId: this.configService.get('PROVIDER_ACTOR_ID', {
         infer: true,
       }),
+      callbackBaseUrl: this.providerAllocation.callbackBaseUrl,
     };
   }
 }

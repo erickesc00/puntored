@@ -13,11 +13,13 @@ import { CreateReferenceDto } from './dto/create-reference.dto';
 import { ListReferencesDto } from './dto/list-references.dto';
 import {
   REFERENCES_IDEMPOTENCY_SCOPE,
+  buildDeterministicReferenceId,
   createIdempotencyFingerprint,
   evaluateCancellationEligibility,
   getEffectiveReferenceStatus,
   normalizeCreateReferencePayload,
 } from './reference.rules';
+import { ProviderAllocationClient } from './provider-client';
 
 interface CursorPayload {
   createdAt: string;
@@ -48,6 +50,7 @@ export class ReferencesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metricsService: MetricsService,
+    private readonly providerAllocationClient: ProviderAllocationClient,
   ) {}
 
   async createReference(
@@ -102,54 +105,32 @@ export class ReferencesService {
       );
     }
 
+    const referenceId = this.providerAllocationClient.isEnabled
+      ? buildDeterministicReferenceId(
+          REFERENCES_IDEMPOTENCY_SCOPE,
+          actor.userId,
+          trimmedKey,
+        )
+      : undefined;
+
+    const providerAllocation = this.providerAllocationClient.isEnabled
+      ? await this.allocateProviderReference(
+          referenceId!,
+          normalizedPayload,
+          correlationId,
+        )
+      : null;
+
     try {
-      const created = await this.prisma.$transaction(async (tx) => {
-        const reference = await tx.paymentReference.create({
-          data: {
-            concept: normalizedPayload.concept,
-            amount: BigInt(normalizedPayload.amount),
-            currency: normalizedPayload.currency,
-            dueAt,
-            createdBy: actor.userId,
-          },
-          include: {
-            creator: {
-              select: {
-                id: true,
-                username: true,
-                role: true,
-              },
-            },
-          },
-        });
-
-        await tx.auditEvent.create({
-          data: {
-            referenceId: reference.id,
-            actorType: 'USER',
-            actorId: actor.userId,
-            action: 'CREATE_REFERENCE',
-            result: 'SUCCESS',
-            correlationId,
-            metadataJson: {
-              currency: normalizedPayload.currency,
-            },
-          },
-        });
-
-        await tx.idempotencyKey.create({
-          data: {
-            scope: REFERENCES_IDEMPOTENCY_SCOPE,
-            actorId: actor.userId,
-            idempotencyKey: trimmedKey,
-            requestHash,
-            referenceId: reference.id,
-            responseCode: 201,
-            expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
-          },
-        });
-
-        return reference;
+      const created = await this.persistCreatedReference({
+        actor,
+        normalizedPayload,
+        dueAt,
+        trimmedKey,
+        requestHash,
+        correlationId,
+        referenceId,
+        externalReference: providerAllocation?.externalReference ?? null,
       });
 
       this.metricsService.recordReferenceCreate('success');
@@ -173,6 +154,47 @@ export class ReferencesService {
             correlationId,
           );
         }
+      }
+
+      throw error;
+    }
+  }
+
+  private async allocateProviderReference(
+    referenceId: string,
+    normalizedPayload: {
+      concept: string;
+      amount: number;
+      currency: string;
+      dueDate: string;
+    },
+    correlationId?: string,
+  ) {
+    try {
+      return await this.providerAllocationClient.allocateReference({
+        backendReferenceId: referenceId,
+        concept: normalizedPayload.concept,
+        amount: normalizedPayload.amount,
+        currency: normalizedPayload.currency,
+        dueDate: normalizedPayload.dueDate,
+      });
+    } catch (error) {
+      this.metricsService.recordReferenceCreate(
+        'rejected_provider_allocation_failed',
+      );
+
+      if (correlationId) {
+        await this.prisma.auditEvent.create({
+          data: {
+            actorType: 'USER',
+            action: 'CREATE_REFERENCE',
+            result: 'REJECTED_PROVIDER_ALLOCATION_FAILED',
+            correlationId,
+            metadataJson: {
+              referenceId,
+            },
+          },
+        });
       }
 
       throw error;
@@ -514,7 +536,9 @@ export class ReferencesService {
         });
       }
 
-      this.metricsService.recordReferenceCreate('rejected_idempotency_conflict');
+      this.metricsService.recordReferenceCreate(
+        'rejected_idempotency_conflict',
+      );
       throw new ConflictException({
         code: 'IDEMPOTENCY_CONFLICT',
         message: 'Idempotency key was already used with a different payload',
@@ -562,6 +586,76 @@ export class ReferencesService {
 
     this.metricsService.recordReferenceCreate('success');
     return this.serializeReference(reference);
+  }
+
+  private persistCreatedReference(input: {
+    actor: SessionAuth;
+    normalizedPayload: {
+      concept: string;
+      amount: number;
+      currency: string;
+      dueDate: string;
+    };
+    dueAt: Date;
+    trimmedKey: string;
+    requestHash: string;
+    correlationId?: string;
+    referenceId?: string;
+    externalReference?: string | null;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const reference = await tx.paymentReference.create({
+        data: {
+          ...(input.referenceId ? { id: input.referenceId } : {}),
+          concept: input.normalizedPayload.concept,
+          amount: BigInt(input.normalizedPayload.amount),
+          currency: input.normalizedPayload.currency,
+          dueAt: input.dueAt,
+          createdBy: input.actor.userId,
+          ...(input.externalReference
+            ? { externalReference: input.externalReference }
+            : {}),
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              username: true,
+              role: true,
+            },
+          },
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          referenceId: reference.id,
+          actorType: 'USER',
+          actorId: input.actor.userId,
+          action: 'CREATE_REFERENCE',
+          result: 'SUCCESS',
+          correlationId: input.correlationId,
+          metadataJson: {
+            currency: input.normalizedPayload.currency,
+            externalReference: input.externalReference,
+          },
+        },
+      });
+
+      await tx.idempotencyKey.create({
+        data: {
+          scope: REFERENCES_IDEMPOTENCY_SCOPE,
+          actorId: input.actor.userId,
+          idempotencyKey: input.trimmedKey,
+          requestHash: input.requestHash,
+          referenceId: reference.id,
+          responseCode: 201,
+          expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+        },
+      });
+
+      return reference;
+    });
   }
 
   private buildListWhere(

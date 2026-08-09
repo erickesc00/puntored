@@ -40,7 +40,10 @@ export class ProviderEventsService {
     private readonly metricsService: MetricsService,
   ) {}
 
-  async processPaidEvent(payload: ProviderCallbackDto, correlationId?: string) {
+  async processProviderEvent(
+    payload: ProviderCallbackDto,
+    correlationId?: string,
+  ) {
     const payloadHash = this.createPayloadHash(payload);
 
     try {
@@ -94,75 +97,32 @@ export class ProviderEventsService {
     });
 
     if (!reference) {
-      await tx.providerEvent.update({
-        where: { id: providerEvent.id },
-        data: { outcome: 'REJECTED_NOT_FOUND' },
-      });
-      await tx.auditEvent.create({
-        data: {
-          actorType: 'PROVIDER',
-          actorId: this.config.provider.actorId,
-          action: 'PROVIDER_EVENT',
-          result: 'REJECTED_NOT_FOUND',
-          correlationId,
-          metadataJson: {
-            providerEventId: payload.providerEventId,
-            referenceId: payload.referenceId,
-            externalReference: payload.externalReference,
-            status: payload.status,
-          },
-        },
-      });
-
-      return {
-        kind: 'rejected',
+      return this.rejectEvent(tx, providerEvent.id, payload, correlationId, {
         outcome: 'REJECTED_NOT_FOUND',
-        providerEventId: payload.providerEventId,
         code: 'REFERENCE_NOT_FOUND',
         message: 'Reference not found',
         status: 404,
-      };
+      });
     }
 
     if (
       reference.externalReference &&
       reference.externalReference !== payload.externalReference
     ) {
-      await tx.providerEvent.update({
-        where: { id: providerEvent.id },
-        data: {
-          referenceId: reference.id,
-          outcome: 'REJECTED_EXTERNAL_REFERENCE_CONFLICT',
-        },
-      });
-      await tx.auditEvent.create({
-        data: {
-          referenceId: reference.id,
-          actorType: 'PROVIDER',
-          actorId: this.config.provider.actorId,
-          action: 'PROVIDER_EVENT',
-          result: 'REJECTED_EXTERNAL_REFERENCE_CONFLICT',
-          correlationId,
-          metadataJson: {
-            providerEventId: payload.providerEventId,
-            externalReference: payload.externalReference,
-            currentExternalReference: reference.externalReference,
-            currentStatus: getEffectiveReferenceStatus(
-              reference.status,
-              reference.dueAt,
-            ),
-          },
-        },
-      });
-
-      return {
-        kind: 'rejected',
+      return this.rejectEvent(tx, providerEvent.id, payload, correlationId, {
         outcome: 'REJECTED_EXTERNAL_REFERENCE_CONFLICT',
-        providerEventId: payload.providerEventId,
         code: 'PROVIDER_EXTERNAL_REFERENCE_CONFLICT',
         message: 'Provider external reference conflicts with persisted data',
         status: 409,
-      };
+        reference,
+        metadataJson: {
+          currentExternalReference: reference.externalReference,
+          currentStatus: getEffectiveReferenceStatus(
+            reference.status,
+            reference.dueAt,
+          ),
+        },
+      });
     }
 
     const effectiveStatus = getEffectiveReferenceStatus(
@@ -170,7 +130,7 @@ export class ProviderEventsService {
       reference.dueAt,
     );
 
-    if (effectiveStatus === ReferenceStatus.PAID) {
+    if (this.isAlreadyApplied(effectiveStatus, payload.status)) {
       return this.persistAlreadyAppliedResult(
         tx,
         providerEvent.id,
@@ -181,37 +141,16 @@ export class ProviderEventsService {
     }
 
     if (effectiveStatus !== ReferenceStatus.PENDING) {
-      await tx.providerEvent.update({
-        where: { id: providerEvent.id },
-        data: {
-          referenceId: reference.id,
-          outcome: 'REJECTED_TERMINAL_STATE',
-        },
-      });
-      await tx.auditEvent.create({
-        data: {
-          referenceId: reference.id,
-          actorType: 'PROVIDER',
-          actorId: this.config.provider.actorId,
-          action: 'PROVIDER_EVENT',
-          result: 'REJECTED_TERMINAL_STATE',
-          correlationId,
-          metadataJson: {
-            providerEventId: payload.providerEventId,
-            currentStatus: effectiveStatus,
-            externalReference: payload.externalReference,
-          },
-        },
-      });
-
-      return {
-        kind: 'rejected',
+      return this.rejectEvent(tx, providerEvent.id, payload, correlationId, {
         outcome: 'REJECTED_TERMINAL_STATE',
-        providerEventId: payload.providerEventId,
         code: 'PROVIDER_EVENT_CONFLICT',
-        message: 'Reference already reached a terminal local state',
+        message: 'Reference already reached a conflicting terminal local state',
         status: 409,
-      };
+        reference,
+        metadataJson: {
+          currentStatus: effectiveStatus,
+        },
+      });
     }
 
     const updateResult = await tx.paymentReference.updateMany({
@@ -221,7 +160,7 @@ export class ProviderEventsService {
         status: ReferenceStatus.PENDING,
       },
       data: {
-        status: ReferenceStatus.PAID,
+        status: payload.status,
         version: {
           increment: 1,
         },
@@ -237,10 +176,13 @@ export class ProviderEventsService {
 
       if (
         latestReference &&
-        getEffectiveReferenceStatus(
-          latestReference.status,
-          latestReference.dueAt,
-        ) === ReferenceStatus.PAID &&
+        this.isAlreadyApplied(
+          getEffectiveReferenceStatus(
+            latestReference.status,
+            latestReference.dueAt,
+          ),
+          payload.status,
+        ) &&
         (!latestReference.externalReference ||
           latestReference.externalReference === payload.externalReference)
       ) {
@@ -260,53 +202,32 @@ export class ProviderEventsService {
           )
         : reference.status;
 
-      await tx.providerEvent.update({
-        where: { id: providerEvent.id },
-        data: {
-          referenceId: reference.id,
-          outcome: 'REJECTED_TERMINAL_STATE',
-        },
-      });
-      await tx.auditEvent.create({
-        data: {
-          referenceId: reference.id,
-          actorType: 'PROVIDER',
-          actorId: this.config.provider.actorId,
-          action: 'PROVIDER_EVENT',
-          result: 'REJECTED_TERMINAL_STATE',
-          correlationId,
-          metadataJson: {
-            providerEventId: payload.providerEventId,
-            currentStatus,
-            externalReference: payload.externalReference,
-          },
-        },
-      });
-
-      return {
-        kind: 'rejected',
+      return this.rejectEvent(tx, providerEvent.id, payload, correlationId, {
         outcome: 'REJECTED_TERMINAL_STATE',
-        providerEventId: payload.providerEventId,
         code: 'PROVIDER_EVENT_CONFLICT',
-        message: 'Reference already reached a terminal local state',
+        message: 'Reference already reached a conflicting terminal local state',
         status: 409,
-      };
+        reference,
+        metadataJson: {
+          currentStatus,
+        },
+      });
     }
 
-    const paidReference = await tx.paymentReference.findUniqueOrThrow({
+    const updatedReference = await tx.paymentReference.findUniqueOrThrow({
       where: { id: reference.id },
     });
 
     await tx.providerEvent.update({
       where: { id: providerEvent.id },
       data: {
-        referenceId: paidReference.id,
+        referenceId: updatedReference.id,
         outcome: 'SUCCESS',
       },
     });
     await tx.auditEvent.create({
       data: {
-        referenceId: paidReference.id,
+        referenceId: updatedReference.id,
         actorType: 'PROVIDER',
         actorId: this.config.provider.actorId,
         action: 'PROVIDER_EVENT',
@@ -315,8 +236,10 @@ export class ProviderEventsService {
         metadataJson: {
           providerEventId: payload.providerEventId,
           externalReference: payload.externalReference,
+          status: payload.status,
+          occurredAt: payload.occurredAt ?? null,
           paidAt: payload.paidAt ?? null,
-          newVersion: paidReference.version,
+          newVersion: updatedReference.version,
         },
       },
     });
@@ -325,7 +248,7 @@ export class ProviderEventsService {
       kind: 'accepted',
       outcome: 'SUCCESS',
       providerEventId: payload.providerEventId,
-      reference: paidReference,
+      reference: updatedReference,
     };
   }
 
@@ -336,11 +259,16 @@ export class ProviderEventsService {
     payload: ProviderCallbackDto,
     correlationId?: string,
   ): Promise<ProviderResult> {
+    const outcome =
+      payload.status === 'PAID'
+        ? 'ACCEPTED_ALREADY_PAID'
+        : 'ACCEPTED_ALREADY_CANCELLED';
+
     await tx.providerEvent.update({
       where: { id: providerEventRowId },
       data: {
         referenceId: reference.id,
-        outcome: 'ACCEPTED_ALREADY_PAID',
+        outcome,
       },
     });
     await tx.auditEvent.create({
@@ -349,21 +277,70 @@ export class ProviderEventsService {
         actorType: 'PROVIDER',
         actorId: this.config.provider.actorId,
         action: 'PROVIDER_EVENT',
-        result: 'ACCEPTED_ALREADY_PAID',
+        result: outcome,
         correlationId,
         metadataJson: {
           providerEventId: payload.providerEventId,
           externalReference: payload.externalReference,
-          currentStatus: ReferenceStatus.PAID,
+          currentStatus: payload.status,
         },
       },
     });
 
     return {
       kind: 'already_applied',
-      outcome: 'ACCEPTED_ALREADY_PAID',
+      outcome,
       providerEventId: payload.providerEventId,
       reference,
+    };
+  }
+
+  private async rejectEvent(
+    tx: Prisma.TransactionClient,
+    providerEventRowId: string,
+    payload: ProviderCallbackDto,
+    correlationId: string | undefined,
+    input: {
+      outcome: string;
+      code: string;
+      message: string;
+      status: 404 | 409;
+      reference?: PaymentReference;
+      metadataJson?: Record<string, unknown>;
+    },
+  ): Promise<ProviderResult> {
+    await tx.providerEvent.update({
+      where: { id: providerEventRowId },
+      data: {
+        referenceId: input.reference?.id,
+        outcome: input.outcome,
+      },
+    });
+    await tx.auditEvent.create({
+      data: {
+        referenceId: input.reference?.id,
+        actorType: 'PROVIDER',
+        actorId: this.config.provider.actorId,
+        action: 'PROVIDER_EVENT',
+        result: input.outcome,
+        correlationId,
+        metadataJson: {
+          providerEventId: payload.providerEventId,
+          referenceId: payload.referenceId,
+          externalReference: payload.externalReference,
+          status: payload.status,
+          ...input.metadataJson,
+        },
+      },
+    });
+
+    return {
+      kind: 'rejected',
+      outcome: input.outcome,
+      providerEventId: payload.providerEventId,
+      code: input.code,
+      message: input.message,
+      status: input.status,
     };
   }
 
@@ -456,7 +433,8 @@ export class ProviderEventsService {
 
     if (
       existing.outcome === 'SUCCESS' ||
-      existing.outcome === 'ACCEPTED_ALREADY_PAID'
+      existing.outcome === 'ACCEPTED_ALREADY_PAID' ||
+      existing.outcome === 'ACCEPTED_ALREADY_CANCELLED'
     ) {
       return {
         kind: 'duplicate',
@@ -515,6 +493,13 @@ export class ProviderEventsService {
         id: reference.createdBy,
       },
     };
+  }
+
+  private isAlreadyApplied(
+    currentStatus: ReferenceStatus,
+    incomingStatus: ProviderCallbackDto['status'],
+  ) {
+    return currentStatus === incomingStatus;
   }
 
   private createPayloadHash(payload: ProviderCallbackDto) {

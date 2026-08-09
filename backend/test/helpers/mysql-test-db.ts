@@ -113,6 +113,16 @@ export function applyTestEnvironment() {
   process.env.COOKIE_SECURE = process.env.COOKIE_SECURE ?? 'false';
   process.env.LOGIN_RATE_LIMIT_LIMIT =
     process.env.LOGIN_RATE_LIMIT_LIMIT ?? '1000';
+  process.env.PROVIDER_ALLOCATION_ENABLED =
+    process.env.PROVIDER_ALLOCATION_ENABLED ?? 'true';
+  process.env.PROVIDER_STUB_BASE_URL =
+    process.env.PROVIDER_STUB_BASE_URL ?? 'http://127.0.0.1:3009';
+  process.env.PROVIDER_STUB_API_KEY =
+    process.env.PROVIDER_STUB_API_KEY ?? 'test-stub-api-key';
+  process.env.PROVIDER_CALLBACK_BASE_URL =
+    process.env.PROVIDER_CALLBACK_BASE_URL ?? 'http://127.0.0.1:3000';
+  process.env.PROVIDER_ALLOCATION_TIMEOUT_MS =
+    process.env.PROVIDER_ALLOCATION_TIMEOUT_MS ?? '3000';
   process.env.PROVIDER_SHARED_SECRET =
     process.env.PROVIDER_SHARED_SECRET ?? 'test-provider-secret-1234';
   process.env.PROVIDER_ACTOR_ID =

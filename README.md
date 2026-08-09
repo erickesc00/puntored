@@ -1,169 +1,73 @@
-## Estado actual
+# PuntoRed Payment References Portal
 
-- **Work-Unit 0**: documentación base completada.
-- **Frontend**: fuera del alcance inicial; se retomará después de validar el flujo principal del backend.
+Internal full-stack portal to create, review, and cancel payment references backed by an external provider with asynchronous status updates.
 
-## Alcance de la primera fase
+## Quick start
 
-### Incluye
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+cp provider-stub/.env.example provider-stub/.env
+docker compose up --build
+```
 
-- Backend en TypeScript sobre NestJS.
-- Persistencia relacional con **MySQL + migraciones reproducibles**.
-- Autenticación y autorización por rol (`OPERATOR`, `SUPERVISOR`).
-- Creación idempotente de referencias.
-- Listado paginado con filtros requeridos: **status, rango de fechas y búsqueda**.
-- Detalle de referencia con historial/auditoría.
-- Cancelación válida con control de concurrencia.
-- Recepción o simulación de notificaciones del proveedor.
-- Señal de salud y métricas mínimas.
-- Plan de pruebas con capas **unit, integration y e2e**.
+After startup:
 
-## Flujo principal que debe quedar probado
+- Frontend: `http://localhost:3001`
+- Backend health: `http://localhost:3000/api/health`
+- Backend metrics: `http://localhost:3000/api/metrics`
+- Provider stub health: `http://localhost:3002/health`
+- Provider stub operator UI: `http://localhost:3002/operator`
+- Same-origin frontend proxy: `http://localhost:3001/api/health`
 
-1. Un usuario interno inicia sesión.
-2. Crea una referencia de pago.
-3. Reintenta la misma creación con la misma idempotency key sin duplicar registros.
-4. Consulta detalle e historial.
-5. Lista referencias con paginación estable y filtros mínimos.
-6. Un supervisor cancela solo si la referencia sigue en estado válido.
-7. El sistema resiste eventos duplicados o contradictorios del proveedor sin corromper el estado.
+## Main flow walkthrough
 
-## Decisiones técnicas clave
+1. Sign in with an internal user.
+2. Create a payment reference.
+3. Confirm the response already contains a persisted `externalReference`.
+4. Retry the same request with the same idempotency key and get the original result instead of a duplicate record.
+5. Open the reference detail and review its audit history.
+6. Browse references with pagination, status filters, date range filters, and search.
+7. Cancel the reference as a `SUPERVISOR` only when the current state still allows it.
+8. Process duplicate or contradictory provider events without corrupting terminal state.
+9. If the session expires on a protected route, the frontend clears local state and redirects back to `/login` with `returnTo` when applicable.
 
-| Tema | Decisión | Por qué |
+## Demo credentials and fixtures
+
+### Users
+
+- `operator` / `Puntored123!`
+- `supervisor` / `Puntored123!`
+
+### Seeded references
+
+| Status | External reference | Suggested use |
 |---|---|---|
-| Arquitectura | Monolito modular por capas | Separa dominio, aplicación e infraestructura sin sobrediseñar el MVP. |
-| Persistencia | **Prisma + MySQL** | Prisma acelera el modelado tipado y las migraciones; MySQL es familiar y suficiente para el caso. |
-| Autenticación | Sesión backend con cookie segura `httpOnly` | Facilita revocación/logout y evita exponer tokens persistentes en el cliente. |
-| Dinero | `amount` en minor units + `currency` obligatoria | Evita errores de precisión monetaria. |
-| Concurrencia | `version` + transacción para cambios de estado | Es la forma más simple y defendible para el race cancel-vs-paid. |
-| Auditoría | Tabla append-only de auditoría | Cubre trazabilidad básica de eventos relevantes; Basado en eventos simples. |
-| Idempotencia | Una tabla MySQL simple para claves de idempotencia | Mantenerlo en DB ahorra uso de Redis a cambio de rendimiento. |
+| `PENDING` | `DEMO-PENDING-001` | basic review flow |
+| `PAID` | `DEMO-PAID-001` | provider callback evidence |
+| `CANCELLED` | `DEMO-CANCELLED-001` | supervisor cancellation evidence |
+| `EXPIRED` | `DEMO-EXPIRED-001` | expired terminal-state demo |
 
-## Supuestos de negocio, dominio y seguridad
+## Installation, execution, and tests
 
-### Negocio y dominio
+### Canonical local runtime
 
-- La referencia externa (`externalReference`) tiene longitud máxima de **30 caracteres**.
-- El estado inicial de toda referencia creada localmente es `PENDING`.
-- Los estados relevantes del MVP son `PENDING`, `PAID`, `CANCELLED` y `EXPIRED`.
-- La transición entre los estados: `PAID`, `CANCELLED` y `EXPIRED` solo es válida desde `PENDING`.
-- Todos los timestamps se manejarán en **UTC**.
-- La paginación debe ser estable usando un orden determinístico, pensado para crecer hasta ~1M de registros.
+The repository is designed to run from the repo root with Docker Compose.
 
-### Seguridad
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+cp provider-stub/.env.example provider-stub/.env
+docker compose up --build
+```
 
-- Passwords almacenados con hash seguro; nunca en texto plano (bcrypt).
-- Cookie de sesión `httpOnly`, `SameSite=Lax`, `Secure` en ambientes compatibles.
-- Expiración de sesión: **30 minutos idle** y **8 horas absolute timeout**.
-- Errores de login genéricos para evitar enumeración de usuarios.
-- Rate limiting fuerte en login y razonable en endpoints sensibles.
-- Mínimo privilegio: `OPERATOR` crea/consulta; `SUPERVISOR` además cancela.
-- Validación en fronteras del sistema; no confiar solo en tipos de TypeScript.
-- Las notificaciones del proveedor usarán un mecanismo MVP autenticado por secreto compartido o equivalente simple y documentado.
+Startup order:
 
-## Reglas críticas documentadas
+`mysql` + healthy `provider-stub` -> `backend-init` (`prisma generate` + migrations + seed) -> healthy `backend` -> `frontend`
 
-### 1. Prisma + MySQL
+### Backend-only runtime
 
-La elección actual para persistencia es **Prisma sobre MySQL**. Se prioriza:
-
-- migraciones reproducibles,
-- tipado fuerte en TypeScript,
-- transacciones explícitas
-
-### 2. Idempotencia simple en una sola tabla MySQL
-
-La implementación MVP usará una tabla dedicada, conceptualmente similar a:
-
-- `scope`
-- `actor_id`
-- `idempotency_key`
-- `request_hash`
-- `reference_id` o resultado asociado
-- `response_code`
-- timestamps / expiración
-
-Regla:
-
-- misma key + mismo actor + mismo payload normalizado => devolver resultado original,
-- misma key + mismo actor + payload distinto => conflicto,
-- no se introduce Redis ni coordinación distribuida en esta fase.
-
-### 3. Regla de contradicción del proveedor
-
-Si el proveedor envía un evento tardío que contradice un estado terminal válido ya persistido localmente, el sistema **no reescribe automáticamente** el estado final. Ese evento se **rechaza y audita**. El MVP prioriza una fuente de verdad consistente y defendible por encima de reconciliación automática avanzada.
-
-### 4. Estrategia de sesión y seguridad
-
-El MVP usará sesión server-side persistida en MySQL, no JWT almacenado en navegador. Esto permite:
-
-- logout real,
-- revocación simple,
-- expiración centralizada,
-- menor exposición de credenciales/tokens en cliente.
-
-## Observabilidad mínima esperada
-
-La evidencia operativa básica NO se limita a `/health`.
-
-Puede incluir:
-
-- `health` / readiness contra base de datos,
-- logs estructurados con correlation ID,
-- sin exponer secretos o datos sensibles,
-- métricas mínimas de:
-  - errores,
-  - latencia,
-  - creaciones,
-  - cancelaciones,
-  - fallos/rechazos del proveedor.
-
-## Estrategia de pruebas
-
-La solución debe cubrir tres capas:
-
-| Capa | Qué valida |
-|---|---|
-| Unit | reglas de transición, elegibilidad de cancelación, expiración, normalización de idempotencia |
-| Integration | persistencia Prisma/MySQL, índices/restricciones, autorización, duplicados, carrera cancel-vs-paid |
-| E2E | flujo principal de mayor riesgo: login -> create -> retry seguro -> list/detail -> cancel válido o conflicto |
-
-También se deben cubrir explícitamente errores, duplicados y transiciones inválidas. Lo no probado deberá quedar explicado.
-
-## Riesgos y deuda consciente
-
-- La autenticación por sesión agrega trabajo de persistencia y seguridad desde el inicio.
-- La regla de contradicción del proveedor resuelve el MVP, pero no reemplaza una futura reconciliación operativa.
-
-## Plan de implementación por work-unit
-
-| Work-Unit | Objetivo | Estado |
-|---|---|---|
-| 0 | Documentación base única del repo antes de código | ✅ Completado |
-| 1 | Foundation + DB + auth + salud/observabilidad mínima | Pendiente |
-| 2 | References: create/list/detail/cancel + auditoría + idempotencia | Pendiente |
-| 3 | Provider ingest + pruebas de riesgo + cierre de documentación/API | Pendiente |
-
-### Desglose operativo actual
-
-- **WU0**: consolidar README canónico, supuestos, decisiones, riesgos y plan.
-- **WU1**: endurecer scaffold NestJS, Prisma/MySQL, migraciones, sesiones, guards, `/health`, métricas básicas.
-- **WU2**: referencias de pago con create/list/detail/cancel, auditoría e idempotencia en MySQL.
-- **WU3**: eventos del proveedor, protección ante duplicados/contradicciones, pruebas unit/integration/e2e y cierre documental.
-
-## Instalación, ejecución y pruebas
-
-### Estado honesto hoy
-
-Hoy ya existe una base funcional del backend en `backend/` con:
-
-- Prisma schema + migración inicial + seed.
-- `docker-compose.yml` para MySQL local y API.
-- Auth/session base con cookie segura server-side.
-- `/api/health` y `/api/metrics`.
-
-### Comandos actuales
+Use this only if you need to debug the API in isolation.
 
 ```bash
 cd backend
@@ -174,51 +78,187 @@ npx prisma db seed
 npm run start:dev
 ```
 
-Para levantar API + DB con Compose:
+### Frontend local commands
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+npm run test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Development default:
+
+- `BACKEND_ORIGIN=http://localhost:3000`
+
+### Provider stub local commands
+
+```bash
+cd provider-stub
+npm install
+cp .env.example .env
+npm run dev
+npm run test
+npm run typecheck
+npm run build
+```
+
+Useful stub surfaces:
+
+- `GET /operator` serves a minimal operator page to inspect provider references and trigger `PAID` / `CANCELLED` callbacks.
+
+- `POST /external-references` with header `x-stub-api-key`
+- `GET /external-references?status=&backendReferenceId=` with header `x-stub-api-key`
+- `POST /external-references/:backendReferenceId/callback` with header `x-stub-api-key` and body `{ "status": "PAID" | "CANCELLED" }`
+
+### Canonical verification commands
+
+#### Backend
 
 ```bash
 cd backend
-cp .env.example .env
-docker compose up
+npm ci
+npm run prisma:generate
+npm run lint
+npm run typecheck
+npm run test
+npm run test:e2e
+npm run build
 ```
 
-### Usuarios demo seed
+#### Frontend
 
-- `operator` / `Puntored123!`
-- `supervisor` / `Puntored123!`
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
 
-## Contrato API
+#### Provider stub
 
-Base disponible en esta fase:
+```bash
+cd provider-stub
+npm ci
+npm run typecheck
+npm run test
+npm run build
+```
+
+#### CI evidence
+
+- Minimal CI workflow: `.github/workflows/ci.yml`
+- Reproducible demo data: `backend/prisma/seed.ts`
+
+## Scope delivered in this repository
+
+### Backend
+
+- NestJS API in TypeScript.
+- Relational persistence with Prisma + MySQL and reproducible migrations.
+- Role-based authentication and authorization for `OPERATOR` and `SUPERVISOR`.
+- Idempotent reference creation.
+- Paginated list with status, date range, and search filters.
+- Reference detail with audit/history.
+- State-aware cancellation with concurrency control.
+- Provider-backed external reference allocation plus notification ingestion/simulation.
+- Health endpoint and basic metrics.
+
+### Frontend
+
+- Next.js App Router frontend in TypeScript.
+- Login/logout with session bootstrap through `/auth/me`.
+- Protected same-origin API access through `/api/*` proxying.
+- Paginated list with URL-driven filters and navigation state.
+- Reference creation with client-side validation and idempotency intent reuse.
+- Detail/history view and supervisor-only cancellation with conflict recovery.
+- Loading, empty, success, and error states for the main flows.
+
+## Technical decisions
+
+
+| Topic | Context | Options considered | Decision | Consequences |
+|---|---|---|---|---|
+| Architecture | The challenge requires separation of transport, use-case orchestration, and infrastructure without overengineering. | Tight controller/component logic vs. layered modular monolith vs. heavier hexagonal split. | Use a layered modular monolith. | Trade-off: this structure makes easier to separate responsabilities, but it is less explicit than a full ports-and-adapters design and still requires discipline to keep business rules out of controllers and framework-specific code. |
+| Persistence | The system needs relational storage, reproducible migrations, and strong TypeScript ergonomics inside NestJS. | TypeORM + MySQL vs. Prisma + MySQL vs. raw SQL/query builder. | Use Prisma + MySQL. | Trade-off: Prisma gives faster typed modeling and a straightforward migration flow, but it moves away from the most common NestJS default (`TypeORM`) and requires accepting Prisma-specific patterns instead of repository abstractions baked around TypeORM. [Prisma vs TypeORM](https://www.prisma.io/docs/orm/more/comparisons/prisma-and-typeorm) |
+| Authentication | The app is internal and needs role-based authorization plus safe session expiration. | Browser-stored JWT vs. backend session cookie. | Use server-side sessions with secure `httpOnly` cookies. | Easier logout/revocation and less token exposure in the browser, but requires session persistence and careful cookie configuration. |
+| Money modeling | The challenge explicitly forbids precision errors in monetary amounts. | Floating-point amounts vs. decimal strings vs. minor units. | Store `amount` in minor units plus mandatory `currency`. | Avoids floating-point bugs and makes validation rules explicit at API and UI boundaries. |
+| Concurrency and idempotency | Idempotent creation is a hard requirement, and cancel-vs-paid races are a core risk area. The design decision was how to transport and persist the idempotency key while keeping the solution operable. | Idempotency key in request body vs. idempotency key in request header, combined with persistence in Redis vs. persistence in the relational database. | Use the `Idempotency-Key` request header, persist the key in a dedicated database table, and use `version` + transactions for state changes. | Trade-off: this keeps the contract explicit, auditable, and self-contained in the main datastore, but sacrifices the maximum throughput and low-latency profile a Redis-based strategy could provide and adds indexing/retention concerns to the relational layer. |
+
+## Assumptions and controlled open questions
+
+### Assumptions
+
+- Every locally created reference starts as `PENDING`.
+- Terminal states are `PAID`, `CANCELLED`, and `EXPIRED`.
+- Terminal transitions are only valid from `PENDING`.
+- All timestamps are handled in UTC.
+- Pagination must remain stable and deterministic for large datasets.
+- The frontend runs same-origin or behind a reverse proxy so cookie-based auth works without a separate cross-origin auth design.
+- Provider notifications use a simple authenticated mechanism such as a shared secret.
+
+## Risks and conscious debt
+
+- Session-based authentication is safer for this use case, but it increases persistence and cookie management complexity.
+- Contradictory provider events are rejected and audited so it is not a full reconciliation strategy.
+- The frontend depends on same-origin or reverse proxy deployment assumptions; cross-origin auth/CORS is intentionally out of scope.
+- Frontend runtime evidence uses Vitest + Testing Library rather than a browser-driven external E2E tool such as Playwright.
+
+## Testing strategy
+
+| Layer | What it validates |
+|---|---|
+| Unit | transition rules, cancellation eligibility, expiration logic, idempotency normalization |
+| Integration | Prisma/MySQL persistence, constraints/indexes, authorization, duplicates, cancel-vs-paid race handling |
+| E2E/runtime | highest-risk flow: login -> create -> safe retry -> list/detail -> valid cancel or conflict |
+
+Also covered explicitly:
+
+- duplicate requests,
+- invalid transitions,
+- session-loss handling,
+- stale version/conflict recovery in the UI.
+
+## API contract and supporting evidence
+
+### Canonical API contract
+
+No standalone exported API collection is versioned in this repository right now. The canonical local contract is the running backend plus the endpoint list and verification commands documented in this README.
+
+### Main endpoints currently available
 
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
+- `GET /api/references`
+- `POST /api/references`
+- `GET /api/references/:id`
+- `POST /api/references/:id/cancel`
 - `GET /api/health`
 - `GET /api/metrics`
 
-Se agregará una colección de Postman preparada para interactuar con la API en work-units posteriores.
+## AI usage summary
 
-## Uso de inteligencia artificial
+* **Agent**: OpenCode
+* **Models**: OpenAI GPT5.4, GLM5.2
+* **Strategy**: SDD
 
-### Resumen actual
+- AI was used to support challenge analysis, SDD planning, documentation refinement, gap review between requirements and implementation, and guided execution.
+- Architecture choices, scope decisions, trade-offs, and simplifications were explicitly reviewed and owned by the developer.
+- Everything delivered in this repository must remain explainable, debuggable, and modifiable without relying on generated output.
 
-- Se está usando IA para apoyar análisis del enunciado, estructuración SDD, documentación, revisión de gaps entre especificación e implementación y ejecución guiada del plan.
-- Las decisiones de arquitectura, alcance, trade-offs y simplificación del MVP fueron validadas explícitamente por el desarrollador.
-- Todo lo documentado y luego implementado debe poder ser explicado, depurado y modificado manualmente.
+## Next priorities
 
-## Preguntas abiertas controladas
+If a second iteration were available, the priorities would be:
 
-- Si la búsqueda MVP sobre `externalReference` + `concept` alcanza, o si en defensa se espera algo más amplio.
-- Si la simulación del proveedor reutilizará exactamente el callback o si habrá una ruta interna separada.
-
-## Próxima actualización esperada de este README
-
-Cuando termine la siguiente work-unit, este documento debe incorporar:
-
-- comandos reales con Docker Compose,
-- migraciones y seed,
-- usuarios demo,
-- rutas/API efectivas,
-- cobertura implementada,
-- deuda consciente actualizada.
+1. Strengthen provider reconciliation beyond the current reject-and-audit MVP rule.
+2. Expand operational observability with richer business metrics and alerting thresholds.
+3. Increase browser-level end-to-end coverage for the highest-risk flows.
+4. Harden rate limiting and abuse protections with more production-oriented policies.
+5. Revisit search breadth, audit retention, and scaling indexes with production traffic assumptions.

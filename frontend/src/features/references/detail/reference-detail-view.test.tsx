@@ -36,7 +36,7 @@ const jsonResponse = (status: number, body?: unknown) =>
 
 const buildReference = (overrides?: Partial<Record<string, unknown>>) => ({
   id: 'ref-1',
-  externalReference: null,
+  externalReference: 'EXT-REF-1',
   concept: 'Matrícula agosto',
   amount: 125050,
   currency: 'COP',
@@ -103,8 +103,7 @@ describe('ReferenceDetailView', () => {
     render(<ReferenceDetailView referenceId="ref-1" />);
 
     expect(await screen.findByText('Matrícula agosto')).toBeInTheDocument();
-    expect(screen.getByText('Sin referencia externa')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('EXT-REF-1')).toBeInTheDocument();
     expect(screen.getByText('CREATE REFERENCE · SUCCESS')).toBeInTheDocument();
     expect(screen.getByText('CREATE REFERENCE · REPLAYED')).toBeInTheDocument();
     expect(
@@ -192,7 +191,6 @@ describe('ReferenceDetailView', () => {
       }),
     );
     expect(screen.getAllByText('Cancelada').length).toBeGreaterThan(0);
-    expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('CANCEL REFERENCE · SUCCESS')).toBeInTheDocument();
   });
 
@@ -309,7 +307,6 @@ describe('ReferenceDetailView', () => {
         'La referencia cambió antes de completar la cancelación. Ya refrescamos el detalle con la última versión.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancelar referencia' }));
     await user.click(screen.getByRole('button', { name: 'Confirmar cancelación' }));

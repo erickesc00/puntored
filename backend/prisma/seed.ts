@@ -13,7 +13,7 @@ export const DEMO_PASSWORD = 'Puntored123!';
 
 type SeedHistoryEvent = {
   actorType: 'USER' | 'SYSTEM' | 'PROVIDER';
-  actor: 'operator' | 'supervisor' | string;
+  actor: string;
   action: string;
   result: string;
   metadataJson?: Prisma.InputJsonValue;
@@ -160,7 +160,9 @@ async function upsertDemoReference(
   });
 
   await client.auditEvent.deleteMany({ where: { referenceId: reference.id } });
-  await client.providerEvent.deleteMany({ where: { referenceId: reference.id } });
+  await client.providerEvent.deleteMany({
+    where: { referenceId: reference.id },
+  });
 
   await client.auditEvent.createMany({
     data: fixture.history.map((event) => ({
@@ -174,7 +176,7 @@ async function upsertDemoReference(
             : event.actor,
       action: event.action,
       result: event.result,
-      metadataJson: event.metadataJson as Prisma.InputJsonValue | undefined,
+      metadataJson: event.metadataJson,
     })),
   });
 

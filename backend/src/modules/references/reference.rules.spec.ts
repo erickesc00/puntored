@@ -1,5 +1,6 @@
 import { ReferenceStatus } from '@prisma/client';
 import {
+  buildDeterministicReferenceId,
   createIdempotencyFingerprint,
   evaluateCancellationEligibility,
   normalizeCreateReferencePayload,
@@ -79,5 +80,34 @@ describe('reference rules', () => {
 
     expect(left).toBe(right);
     expect(left).not.toBe(different);
+  });
+
+  it('builds the same deterministic reference id for the same scope actor and idempotency key', () => {
+    expect(
+      buildDeterministicReferenceId(
+        'payment-reference:create',
+        'user-1',
+        'intent-1',
+      ),
+    ).toBe(
+      buildDeterministicReferenceId(
+        'payment-reference:create',
+        'user-1',
+        'intent-1',
+      ),
+    );
+    expect(
+      buildDeterministicReferenceId(
+        'payment-reference:create',
+        'user-1',
+        'intent-1',
+      ),
+    ).not.toBe(
+      buildDeterministicReferenceId(
+        'payment-reference:create',
+        'user-1',
+        'intent-2',
+      ),
+    );
   });
 });

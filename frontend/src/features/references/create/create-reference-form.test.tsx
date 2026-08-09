@@ -52,6 +52,7 @@ describe('CreateReferenceForm', () => {
     const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       jsonResponse(201, {
         id: 'ref-1',
+        externalReference: 'EXT-REF-1',
       }),
     );
 
@@ -112,6 +113,7 @@ describe('CreateReferenceForm', () => {
       .mockResolvedValueOnce(
         jsonResponse(201, {
           id: 'ref-1',
+          externalReference: 'EXT-REF-1',
         }),
       );
 
