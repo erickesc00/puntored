@@ -60,6 +60,24 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  private readonly referenceExpirationAttempts = new Counter({
+    name: 'puntored_reference_expiration_attempted_total',
+    help: 'Overdue pending references evaluated for automatic expiration',
+    registers: [this.registry],
+  });
+
+  private readonly referenceExpirationSuccesses = new Counter({
+    name: 'puntored_reference_expiration_expired_total',
+    help: 'References successfully transitioned from pending to expired',
+    registers: [this.registry],
+  });
+
+  private readonly referenceExpirationSkips = new Counter({
+    name: 'puntored_reference_expiration_skipped_total',
+    help: 'Automatic expiration attempts skipped due to races or terminal rows',
+    registers: [this.registry],
+  });
+
   constructor() {
     this.registry.setDefaultLabels({ service: 'puntored-backend' });
     collectDefaultMetrics({ register: this.registry, prefix: 'puntored_' });
@@ -99,6 +117,18 @@ export class MetricsService {
 
   recordReferenceCancel(outcome: string) {
     this.referenceCancels.inc({ outcome });
+  }
+
+  recordReferenceExpirationAttempted(count: number) {
+    this.referenceExpirationAttempts.inc(count);
+  }
+
+  recordReferenceExpirationExpired(count: number) {
+    this.referenceExpirationSuccesses.inc(count);
+  }
+
+  recordReferenceExpirationSkipped(count: number) {
+    this.referenceExpirationSkips.inc(count);
   }
 
   async getMetrics() {

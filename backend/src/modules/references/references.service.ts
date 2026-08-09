@@ -416,12 +416,17 @@ export class ReferencesService {
       });
     }
 
+    const transitionCutoff = new Date();
+
     const cancellationResult = await this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.paymentReference.updateMany({
         where: {
           id: reference.id,
           version: reference.version,
           status: ReferenceStatus.PENDING,
+          dueAt: {
+            gt: transitionCutoff,
+          },
         },
         data: {
           status: ReferenceStatus.CANCELLED,
@@ -483,28 +488,45 @@ export class ReferencesService {
         },
       });
 
+      const currentStatus = persistedReference
+        ? getEffectiveReferenceStatus(
+            persistedReference.status,
+            persistedReference.dueAt,
+          )
+        : reference.status;
+      const expiredDuringTransition = currentStatus === ReferenceStatus.EXPIRED;
+
       await this.prisma.auditEvent.create({
         data: {
           referenceId: reference.id,
           actorType: 'USER',
           actorId: actor.userId,
           action: 'CANCEL_REFERENCE',
-          result: 'REJECTED_VERSION_CONFLICT',
+          result: expiredDuringTransition
+            ? 'REJECTED_EXPIRED'
+            : 'REJECTED_VERSION_CONFLICT',
           correlationId,
           metadataJson: {
             expectedVersion: payload.version,
             currentVersion: persistedReference?.version ?? reference.version,
-            currentStatus: persistedReference
-              ? getEffectiveReferenceStatus(
-                  persistedReference.status,
-                  persistedReference.dueAt,
-                )
-              : reference.status,
+            currentStatus,
           },
         },
       });
 
-      this.metricsService.recordReferenceCancel('rejected_version_conflict');
+      this.metricsService.recordReferenceCancel(
+        expiredDuringTransition
+          ? 'rejected_expired'
+          : 'rejected_version_conflict',
+      );
+
+      if (expiredDuringTransition) {
+        throw new ConflictException({
+          code: 'REFERENCE_EXPIRED',
+          message: 'Expired references cannot be cancelled',
+        });
+      }
+
       throw new ConflictException({
         code: 'REFERENCE_VERSION_CONFLICT',
         message: 'Reference version conflict',

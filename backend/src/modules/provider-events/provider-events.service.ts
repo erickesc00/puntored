@@ -153,11 +153,16 @@ export class ProviderEventsService {
       });
     }
 
+    const transitionCutoff = new Date();
+
     const updateResult = await tx.paymentReference.updateMany({
       where: {
         id: reference.id,
         version: reference.version,
         status: ReferenceStatus.PENDING,
+        dueAt: {
+          gt: transitionCutoff,
+        },
       },
       data: {
         status: payload.status,

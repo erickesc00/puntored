@@ -99,4 +99,21 @@ export class AppConfigService {
       callbackBaseUrl: this.providerAllocation.callbackBaseUrl,
     };
   }
+
+  get referenceExpiration() {
+    return {
+      enabled: this.configService.get('REFERENCE_EXPIRATION_ENABLED', {
+        infer: true,
+      }),
+      cron: this.configService.get('REFERENCE_EXPIRATION_CRON', {
+        infer: true,
+      }),
+      batchSize: this.configService.get('REFERENCE_EXPIRATION_BATCH_SIZE', {
+        infer: true,
+      }),
+      actorId: this.configService.get('REFERENCE_EXPIRATION_ACTOR_ID', {
+        infer: true,
+      }),
+    };
+  }
 }

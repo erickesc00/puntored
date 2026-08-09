@@ -42,6 +42,12 @@ export const appEnvSchema = z.object({
     .min(16)
     .default('change-this-provider-secret'),
   PROVIDER_ACTOR_ID: z.string().default('provider:puntored'),
+  REFERENCE_EXPIRATION_ENABLED: toBoolean(true),
+  REFERENCE_EXPIRATION_CRON: z.string().default('* * * * *'),
+  REFERENCE_EXPIRATION_BATCH_SIZE: toNumber(100),
+  REFERENCE_EXPIRATION_ACTOR_ID: z
+    .string()
+    .default('system:reference-expirer'),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;
