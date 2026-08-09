@@ -1,0 +1,13 @@
+.atl/
+
+# frontend
+/frontend/node_modules
+/frontend/.next
+/frontend/.env.local
+/frontend/tsconfig.typecheck.tsbuildinfo
+
+# provider stub
+/provider-stub/node_modules
+/provider-stub/build
+/provider-stub/data
+/provider-stub/.env

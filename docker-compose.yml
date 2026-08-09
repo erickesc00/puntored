@@ -27,6 +27,10 @@ services:
     environment:
       DATABASE_URL: mysql://puntored:puntored@mysql:3306/puntored
       COOKIE_SECURE: 'false'
+      PROVIDER_ALLOCATION_ENABLED: 'true'
+      PROVIDER_STUB_BASE_URL: http://provider-stub:3002
+      PROVIDER_STUB_API_KEY: change-this-stub-api-key
+      PROVIDER_CALLBACK_BASE_URL: http://backend:3000
     command: >-
       sh -c "
       npm run prisma:generate &&
@@ -39,6 +43,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      provider-stub:
+        condition: service_healthy
 
   backend:
     build:
@@ -48,6 +54,10 @@ services:
     environment:
       DATABASE_URL: mysql://puntored:puntored@mysql:3306/puntored
       COOKIE_SECURE: 'false'
+      PROVIDER_ALLOCATION_ENABLED: 'true'
+      PROVIDER_STUB_BASE_URL: http://provider-stub:3002
+      PROVIDER_STUB_API_KEY: change-this-stub-api-key
+      PROVIDER_CALLBACK_BASE_URL: http://backend:3000
     command: npm run start:prod
     ports:
       - '3000:3000'
@@ -56,6 +66,8 @@ services:
         condition: service_healthy
       backend-init:
         condition: service_completed_successfully
+      provider-stub:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -93,5 +105,33 @@ services:
       retries: 12
       start_period: 20s
 
+  provider-stub:
+    build:
+      context: ./provider-stub
+    env_file:
+      - provider-stub/.env
+    environment:
+      PORT: '3002'
+      HOST: 0.0.0.0
+      STUB_DB_PATH: /data/stub.db
+      STUB_API_KEY: change-this-stub-api-key
+      BACKEND_CALLBACK_URL: http://backend:3000/api/provider/events
+      PROVIDER_SHARED_SECRET: change-this-provider-secret
+    ports:
+      - '3002:3002'
+    volumes:
+      - provider-stub-data:/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://127.0.0.1:3002/health >/dev/null 2>&1 || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
 volumes:
   mysql-data:
+  provider-stub-data:
