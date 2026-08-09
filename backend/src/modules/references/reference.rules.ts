@@ -22,6 +22,11 @@ export interface CancellationEligibilityResult {
   effectiveStatus: ReferenceStatus;
 }
 
+export interface ExpirationEligibilityResult {
+  eligible: boolean;
+  reason?: 'INVALID_STATUS' | 'NOT_OVERDUE';
+}
+
 export const REFERENCES_IDEMPOTENCY_SCOPE = 'payment-reference:create';
 
 export function buildDeterministicReferenceId(
@@ -67,11 +72,45 @@ export function getEffectiveReferenceStatus(
   dueAt: Date,
   now = new Date(),
 ) {
-  if (status === ReferenceStatus.PENDING && dueAt.getTime() <= now.getTime()) {
+  if (canAutoExpireReference(status, dueAt, now)) {
     return ReferenceStatus.EXPIRED;
   }
 
   return status;
+}
+
+export function isReferenceOverdue(dueAt: Date, now = new Date()) {
+  return dueAt.getTime() <= now.getTime();
+}
+
+export function canAutoExpireReference(
+  status: ReferenceStatus,
+  dueAt: Date,
+  now = new Date(),
+) {
+  return status === ReferenceStatus.PENDING && isReferenceOverdue(dueAt, now);
+}
+
+export function evaluateExpirationEligibility(
+  status: ReferenceStatus,
+  dueAt: Date,
+  now = new Date(),
+): ExpirationEligibilityResult {
+  if (status !== ReferenceStatus.PENDING) {
+    return {
+      eligible: false,
+      reason: 'INVALID_STATUS',
+    };
+  }
+
+  if (!isReferenceOverdue(dueAt, now)) {
+    return {
+      eligible: false,
+      reason: 'NOT_OVERDUE',
+    };
+  }
+
+  return { eligible: true };
 }
 
 export function evaluateCancellationEligibility(

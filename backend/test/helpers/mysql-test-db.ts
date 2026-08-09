@@ -102,7 +102,9 @@ async function createDatabaseAndGrantAccess() {
   }
 }
 
-export function applyTestEnvironment() {
+export function applyTestEnvironment(options?: {
+  referenceExpirationEnabled?: boolean;
+}) {
   process.env.NODE_ENV = 'test';
   process.env.PORT = process.env.PORT ?? '3002';
   process.env.GLOBAL_PREFIX = process.env.GLOBAL_PREFIX ?? 'api';
@@ -127,10 +129,21 @@ export function applyTestEnvironment() {
     process.env.PROVIDER_SHARED_SECRET ?? 'test-provider-secret-1234';
   process.env.PROVIDER_ACTOR_ID =
     process.env.PROVIDER_ACTOR_ID ?? 'provider:test';
+  process.env.REFERENCE_EXPIRATION_ENABLED = String(
+    options?.referenceExpirationEnabled ?? false,
+  );
+  process.env.REFERENCE_EXPIRATION_CRON =
+    process.env.REFERENCE_EXPIRATION_CRON ?? '* * * * *';
+  process.env.REFERENCE_EXPIRATION_BATCH_SIZE =
+    process.env.REFERENCE_EXPIRATION_BATCH_SIZE ?? '100';
+  process.env.REFERENCE_EXPIRATION_ACTOR_ID =
+    process.env.REFERENCE_EXPIRATION_ACTOR_ID ?? 'system:test-reference-expirer';
 }
 
-export async function ensureTestDatabaseReady() {
-  applyTestEnvironment();
+export async function ensureTestDatabaseReady(options?: {
+  referenceExpirationEnabled?: boolean;
+}) {
+  applyTestEnvironment(options);
 
   const databaseUrl = getTestDatabaseUrl();
 

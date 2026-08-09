@@ -15,6 +15,9 @@ import { getSeedUsers, resetTestDatabase } from './helpers/mysql-test-db';
 describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let referenceExpirationService: Awaited<
+    ReturnType<typeof createRealTestApp>
+  >['referenceExpirationService'];
   let operatorUser: Awaited<ReturnType<typeof getSeedUsers>>['operator'];
   let supervisorUser: Awaited<ReturnType<typeof getSeedUsers>>['supervisor'];
   const providerStub = new MockProviderStub('test-stub-api-key');
@@ -26,6 +29,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     const realApp = await createRealTestApp();
     app = realApp.app;
     prisma = realApp.prisma;
+    referenceExpirationService = realApp.referenceExpirationService;
   });
 
   beforeEach(async () => {
@@ -280,6 +284,230 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     expect(await prisma.idempotencyKey.count()).toBe(1);
 
     transactionSpy.mockRestore();
+  });
+
+  it('persists overdue pending references as expired and increments version exactly once', async () => {
+    const operatorCookie = await createSessionCookie(operatorUser.id);
+    const overdueReference = await createPersistedReference({
+      concept: 'Overdue pending reference',
+      dueAt: new Date('2026-08-01T10:00:00.000Z'),
+      status: ReferenceStatus.PENDING,
+      version: 1,
+    });
+    const tickNow = new Date('2026-08-01T11:00:00.000Z');
+
+    await expect(
+      referenceExpirationService.runTick(tickNow),
+    ).resolves.toMatchObject({
+      attempted: 1,
+      expired: 1,
+      skipped: 0,
+    });
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: overdueReference.id },
+    });
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: overdueReference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.EXPIRED);
+    expect(persistedReference.version).toBe(2);
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'EXPIRE_REFERENCE:SUCCESS',
+    ]);
+    expect(auditRows[0]?.metadataJson).toMatchObject({
+      previousVersion: 1,
+      newVersion: 2,
+      dueAt: overdueReference.dueAt.toISOString(),
+    });
+
+    const detailResponse = await request(getHttpServer())
+      .get(`/api/references/${overdueReference.id}`)
+      .set('Cookie', operatorCookie)
+      .expect(200);
+
+    expect(detailResponse.body.reference).toMatchObject({
+      id: overdueReference.id,
+      status: ReferenceStatus.EXPIRED,
+      version: 2,
+    });
+  });
+
+  it('leaves non-overdue and terminal references unchanged during expiration evaluation', async () => {
+    const futurePending = await createPersistedReference({
+      concept: 'Future pending reference',
+      dueAt: new Date('2026-08-01T13:00:00.000Z'),
+      status: ReferenceStatus.PENDING,
+      version: 3,
+    });
+    const paidReference = await createPersistedReference({
+      concept: 'Paid reference',
+      dueAt: new Date('2026-08-01T09:00:00.000Z'),
+      status: ReferenceStatus.PAID,
+      version: 4,
+    });
+    const cancelledReference = await createPersistedReference({
+      concept: 'Cancelled reference',
+      dueAt: new Date('2026-08-01T09:00:00.000Z'),
+      status: ReferenceStatus.CANCELLED,
+      version: 5,
+    });
+    const alreadyExpiredReference = await createPersistedReference({
+      concept: 'Expired reference',
+      dueAt: new Date('2026-08-01T09:00:00.000Z'),
+      status: ReferenceStatus.EXPIRED,
+      version: 6,
+    });
+    const tickNow = new Date('2026-08-01T11:00:00.000Z');
+
+    await expect(
+      referenceExpirationService.runTick(tickNow),
+    ).resolves.toMatchObject({
+      attempted: 0,
+      expired: 0,
+      skipped: 0,
+    });
+
+    const persistedReferences = await prisma.paymentReference.findMany({
+      where: {
+        id: {
+          in: [
+            futurePending.id,
+            paidReference.id,
+            cancelledReference.id,
+            alreadyExpiredReference.id,
+          ],
+        },
+      },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+      },
+    });
+
+    expect(persistedReferences).toEqual(
+      expect.arrayContaining([
+        {
+          id: alreadyExpiredReference.id,
+          status: ReferenceStatus.EXPIRED,
+          version: 6,
+        },
+        {
+          id: cancelledReference.id,
+          status: ReferenceStatus.CANCELLED,
+          version: 5,
+        },
+        {
+          id: futurePending.id,
+          status: ReferenceStatus.PENDING,
+          version: 3,
+        },
+        {
+          id: paidReference.id,
+          status: ReferenceStatus.PAID,
+          version: 4,
+        },
+      ]),
+    );
+
+    const auditCount = await prisma.auditEvent.count({
+      where: {
+        referenceId: {
+          in: [
+            futurePending.id,
+            paidReference.id,
+            cancelledReference.id,
+            alreadyExpiredReference.id,
+          ],
+        },
+        action: 'EXPIRE_REFERENCE',
+      },
+    });
+
+    expect(auditCount).toBe(0);
+  });
+
+  it('is idempotent across reruns and does not fabricate success audits for already expired rows', async () => {
+    const overdueReference = await createPersistedReference({
+      concept: 'Idempotent overdue reference',
+      dueAt: new Date('2026-08-01T10:00:00.000Z'),
+      status: ReferenceStatus.PENDING,
+      version: 1,
+    });
+    const tickNow = new Date('2026-08-01T11:00:00.000Z');
+
+    await expect(
+      referenceExpirationService.runTick(tickNow),
+    ).resolves.toMatchObject({
+      attempted: 1,
+      expired: 1,
+      skipped: 0,
+    });
+    await expect(
+      referenceExpirationService.runTick(tickNow),
+    ).resolves.toMatchObject({
+      attempted: 0,
+      expired: 0,
+      skipped: 0,
+    });
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: overdueReference.id },
+    });
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: overdueReference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.EXPIRED);
+    expect(persistedReference.version).toBe(2);
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({
+      action: 'EXPIRE_REFERENCE',
+      result: 'SUCCESS',
+    });
+  });
+
+  it('keeps fallback reads exposing overdue pending references as expired during rollout', async () => {
+    const operatorCookie = await createSessionCookie(operatorUser.id);
+    const overduePending = await createPersistedReference({
+      concept: 'Fallback overdue pending reference',
+      dueAt: new Date('2026-08-01T10:00:00.000Z'),
+      status: ReferenceStatus.PENDING,
+      version: 1,
+    });
+
+    const detailResponse = await request(getHttpServer())
+      .get(`/api/references/${overduePending.id}`)
+      .set('Cookie', operatorCookie)
+      .expect(200);
+
+    const listResponse = await request(getHttpServer())
+      .get('/api/references?status=EXPIRED')
+      .set('Cookie', operatorCookie)
+      .expect(200);
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: overduePending.id },
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.PENDING);
+    expect(detailResponse.body.reference).toMatchObject({
+      id: overduePending.id,
+      status: ReferenceStatus.EXPIRED,
+      version: 1,
+    });
+    expect(
+      listResponse.body.items.some(
+        (item: { id: string; status: ReferenceStatus }) =>
+          item.id === overduePending.id &&
+          item.status === ReferenceStatus.EXPIRED,
+      ),
+    ).toBe(true);
   });
 
   it('filters the list by persisted status', async () => {

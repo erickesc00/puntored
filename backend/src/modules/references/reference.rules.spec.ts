@@ -1,8 +1,11 @@
 import { ReferenceStatus } from '@prisma/client';
 import {
   buildDeterministicReferenceId,
+  canAutoExpireReference,
   createIdempotencyFingerprint,
   evaluateCancellationEligibility,
+  evaluateExpirationEligibility,
+  isReferenceOverdue,
   normalizeCreateReferencePayload,
 } from './reference.rules';
 
@@ -109,5 +112,46 @@ describe('reference rules', () => {
         'intent-2',
       ),
     );
+  });
+
+  it('identifies overdue pending references as auto-expiration candidates', () => {
+    const now = new Date('2026-08-05T12:00:00.000Z');
+
+    expect(
+      isReferenceOverdue(new Date('2026-08-05T11:59:59.000Z'), now),
+    ).toBe(true);
+    expect(
+      canAutoExpireReference(
+        ReferenceStatus.PENDING,
+        new Date('2026-08-05T11:59:59.000Z'),
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      evaluateExpirationEligibility(
+        ReferenceStatus.PENDING,
+        new Date('2026-08-05T11:59:59.000Z'),
+        now,
+      ),
+    ).toEqual({ eligible: true });
+  });
+
+  it('rejects non-overdue or terminal references from auto-expiration', () => {
+    const now = new Date('2026-08-05T12:00:00.000Z');
+
+    expect(
+      evaluateExpirationEligibility(
+        ReferenceStatus.PENDING,
+        new Date('2026-08-05T12:00:01.000Z'),
+        now,
+      ),
+    ).toEqual({ eligible: false, reason: 'NOT_OVERDUE' });
+    expect(
+      evaluateExpirationEligibility(
+        ReferenceStatus.CANCELLED,
+        new Date('2026-08-05T11:59:59.000Z'),
+        now,
+      ),
+    ).toEqual({ eligible: false, reason: 'INVALID_STATUS' });
   });
 });

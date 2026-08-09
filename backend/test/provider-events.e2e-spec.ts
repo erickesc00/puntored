@@ -11,6 +11,9 @@ import { getSeedUsers, resetTestDatabase } from './helpers/mysql-test-db';
 describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let referenceExpirationService: Awaited<
+    ReturnType<typeof createRealTestApp>
+  >['referenceExpirationService'];
   let operatorUser: Awaited<ReturnType<typeof getSeedUsers>>['operator'];
   let supervisorUser: Awaited<ReturnType<typeof getSeedUsers>>['supervisor'];
 
@@ -18,6 +21,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
     const realApp = await createRealTestApp();
     app = realApp.app;
     prisma = realApp.prisma;
+    referenceExpirationService = realApp.referenceExpirationService;
   });
 
   beforeEach(async () => {
@@ -246,6 +250,89 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       'CANCEL_ATTEMPT:STARTED',
       'CANCEL_REFERENCE:SUCCESS',
       'PROVIDER_EVENT:REJECTED_TERMINAL_STATE',
+    ]);
+  });
+
+  it('keeps a provider-paid reference paid when expiration runs after the winning transition', async () => {
+    const dueAt = new Date(Date.now() + 60 * 60 * 1000);
+    const reference = await createPersistedReference({
+      dueAt,
+      status: ReferenceStatus.PENDING,
+      version: 1,
+    });
+    const payload = providerPayload(reference.id, {
+      externalReference: 'EXT-EXPIRE-RACE-PAID-001',
+    });
+
+    await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    await expect(
+      referenceExpirationService.runTick(
+        new Date(dueAt.getTime() + 60 * 60 * 1000),
+      ),
+    ).resolves.toMatchObject({
+      attempted: 0,
+      expired: 0,
+      skipped: 0,
+    });
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: reference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.PAID);
+    expect(persistedReference.version).toBe(2);
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'PROVIDER_EVENT:SUCCESS',
+    ]);
+  });
+
+  it('keeps a cancelled reference cancelled when expiration runs after the winning transition', async () => {
+    const supervisorCookie = await createSessionCookie(supervisorUser.id);
+    const dueAt = new Date(Date.now() + 60 * 60 * 1000);
+    const reference = await createPersistedReference({
+      dueAt,
+      status: ReferenceStatus.PENDING,
+      version: 1,
+    });
+
+    await request(getHttpServer())
+      .post(`/api/references/${reference.id}/cancel`)
+      .set('Cookie', supervisorCookie)
+      .send({ version: 1 })
+      .expect(201);
+
+    await expect(
+      referenceExpirationService.runTick(
+        new Date(dueAt.getTime() + 60 * 60 * 1000),
+      ),
+    ).resolves.toMatchObject({
+      attempted: 0,
+      expired: 0,
+      skipped: 0,
+    });
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    const auditRows = await prisma.auditEvent.findMany({
+      where: { referenceId: reference.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    expect(persistedReference.status).toBe(ReferenceStatus.CANCELLED);
+    expect(persistedReference.version).toBe(2);
+    expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
+      'CANCEL_ATTEMPT:STARTED',
+      'CANCEL_REFERENCE:SUCCESS',
     ]);
   });
 
