@@ -364,6 +364,7 @@ button {
   font-size: clamp(2rem, 4vw, 2.6rem);
   line-height: 1.08;
   letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
 }
 
 .page-heading-copy p,
@@ -667,6 +668,8 @@ button {
 .detail-summary-grid dd,
 .detail-summary-list dd {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .confirm-panel {
@@ -781,6 +784,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow-wrap: anywhere;
 }
 
 .history-timestamp {
@@ -802,6 +806,7 @@ button {
 
 .history-card {
   align-self: start;
+  min-width: 0;
   height: min(620px, calc(100vh - 240px));
   min-height: 0;
   overflow: hidden;
@@ -856,6 +861,10 @@ button {
     gap: 16px;
   }
 
+  .detail-layout {
+    grid-template-columns: 1fr;
+  }
+
   .detail-heading-actions {
     width: 100%;
     padding-top: 0;
@@ -899,7 +908,8 @@ button {
 
   .detail-column,
   .history-card {
-    height: min(620px, calc(100vh - 220px));
+    height: auto;
+    min-height: 0;
   }
 
   .history-item-title-row {
