@@ -1,12 +1,12 @@
 import { apiClient } from '@/lib/api/client';
-import type { ReferenceSummary } from '@/features/references/shared/types';
+import type { components } from '@/lib/api/generated-types';
 import type { CreateReferencePayload } from './validation';
 
 export const createReference = (
   payload: CreateReferencePayload,
   idempotencyKey: string,
 ) =>
-  apiClient.post<ReferenceSummary>('/references', {
+  apiClient.post<components['schemas']['ReferenceResponseDto']>('/references', {
     body: payload,
     headers: {
       'Idempotency-Key': idempotencyKey,
