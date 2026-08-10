@@ -5,6 +5,8 @@
 /frontend/.next
 /frontend/.env.local
 /frontend/tsconfig.typecheck.tsbuildinfo
+/frontend/test-results/
+/frontend/playwright-report/
 
 # provider stub
 /provider-stub/node_modules
