@@ -249,10 +249,11 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
 
       expect(response.body.currency).toBe(currency);
 
-      const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
-        where: { id: response.body.id as string },
-        select: { currency: true },
-      });
+      const persistedReference =
+        await prisma.paymentReference.findUniqueOrThrow({
+          where: { id: response.body.id as string },
+          select: { currency: true },
+        });
 
       expect(persistedReference.currency).toBe(currency);
     },
@@ -827,12 +828,12 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
         },
       },
       orderBy: { externalReference: 'asc' },
-        select: {
-          externalReference: true,
-          currency: true,
-          status: true,
-          version: true,
-        },
+      select: {
+        externalReference: true,
+        currency: true,
+        status: true,
+        version: true,
+      },
     });
 
     const auditCounts = await Promise.all(
