@@ -2,13 +2,24 @@ import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { Public } from '../auth/decorators/public.decorator';
 import { HealthService } from './health.service';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiServiceUnavailableResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { HealthResponseDto } from './dto/health-response.dto';
 
 @Controller('health')
+@ApiTags('health')
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
   @Public()
   @Get()
+  @ApiOperation({ summary: 'Get service health' })
+  @ApiOkResponse({ type: HealthResponseDto })
+  @ApiServiceUnavailableResponse({ type: HealthResponseDto })
   async getHealth(@Res({ passthrough: true }) response: Response) {
     const health = await this.healthService.getHealth();
     response.status(

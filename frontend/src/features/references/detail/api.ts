@@ -1,7 +1,7 @@
 import { apiClient } from '@/lib/api/client';
-import type { ReferenceDetailResponse } from '@/features/references/shared/types';
+import type { components } from '@/lib/api/generated-types';
 
 export const fetchReferenceDetail = (referenceId: string) =>
-  apiClient.get<ReferenceDetailResponse>(
+  apiClient.get<components['schemas']['ReferenceDetailResponseDto']>(
     `/references/${encodeURIComponent(referenceId)}`,
   );

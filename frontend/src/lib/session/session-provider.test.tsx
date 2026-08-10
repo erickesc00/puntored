@@ -68,7 +68,7 @@ describe('ProtectedRouteGate', () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       jsonResponse(200, {
         user: {
-          id: 'u-1',
+          userId: 'u-1',
           username: 'operator',
           role: 'operator',
         },
@@ -100,7 +100,7 @@ describe('ProtectedRouteGate', () => {
       .mockResolvedValueOnce(
         jsonResponse(200, {
           user: {
-            id: 'u-1',
+            userId: 'u-1',
             username: 'operator',
             role: 'operator',
           },
@@ -188,7 +188,7 @@ describe('ProtectedRouteGate', () => {
       .mockResolvedValueOnce(
         jsonResponse(200, {
           user: {
-            id: 'u-1',
+            userId: 'u-1',
             username: 'operator',
             role: 'operator',
           },
@@ -222,7 +222,7 @@ describe('ProtectedRouteGate', () => {
       .mockResolvedValueOnce(
         jsonResponse(200, {
           user: {
-            id: 'u-1',
+            userId: 'u-1',
             username: 'operator',
             role: 'operator',
           },

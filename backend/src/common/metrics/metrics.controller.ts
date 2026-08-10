@@ -1,8 +1,10 @@
 import { Controller, Get, Header } from '@nestjs/common';
 import { Public } from '../../modules/auth/decorators/public.decorator';
 import { MetricsService } from './metrics.service';
+import { ApiExcludeController } from '@nestjs/swagger';
 
 @Controller('metrics')
+@ApiExcludeController()
 export class MetricsController {
   constructor(private readonly metricsService: MetricsService) {}
 

@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/api/client';
+import type { components } from '@/lib/api/generated-types';
 import { ApiClientError, isSessionLossError } from '@/lib/api/errors';
 import {
   buildCurrentUrl,
@@ -22,21 +23,13 @@ import { FeedbackBanner } from '@/components/feedback-banner';
 type SessionStatus = 'idle' | 'loading' | 'authenticated' | 'anonymous';
 type AuthLossReason = 'required' | 'expired';
 
-interface SessionUserResponse {
-  id: string;
-  username: string;
-  role: string;
-}
+type SessionUserResponse = components['schemas']['SessionResponseUserDto'];
+type AuthMeResponse = components['schemas']['SessionResponseDto'];
 
-interface AuthMeResponse {
-  user: SessionUserResponse;
-}
-
-export interface SessionUser {
-  userId: string;
-  username: string;
-  role: string;
-}
+export type SessionUser = Pick<
+  components['schemas']['SessionResponseUserDto'],
+  'userId' | 'username' | 'role'
+>;
 
 interface RefreshSessionOptions {
   redirectOnAuthLoss?: boolean;
@@ -85,7 +78,7 @@ const buildLoginHref = (reason?: AuthLossReason, returnTo?: string) => {
 };
 
 const mapSessionUser = (user: SessionUserResponse): SessionUser => ({
-  userId: user.id,
+  userId: user.userId,
   username: user.username,
   role: user.role,
 });

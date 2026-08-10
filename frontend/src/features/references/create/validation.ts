@@ -1,3 +1,5 @@
+import type { components } from '@/lib/api/generated-types';
+
 export interface CreateReferenceFormValues {
   concept: string;
   amount: string;
@@ -5,12 +7,7 @@ export interface CreateReferenceFormValues {
   dueDate: string;
 }
 
-export interface CreateReferencePayload {
-  concept: string;
-  amount: number;
-  currency: string;
-  dueDate: string;
-}
+export type CreateReferencePayload = components['schemas']['CreateReferenceDto'];
 
 export interface CreateReferenceValidationResult {
   payload: CreateReferencePayload | null;
