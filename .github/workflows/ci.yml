@@ -31,7 +31,6 @@ jobs:
       COOKIE_SECURE: 'false'
       PROVIDER_SHARED_SECRET: ci-provider-secret-1234
       PROVIDER_ACTOR_ID: provider:ci
-      TEST_DATABASE_URL: mysql://puntored:puntored@127.0.0.1:33060/puntored_test_ci
       TEST_DATABASE_ADMIN_URL: mysql://root:root@127.0.0.1:33060/mysql
     steps:
       - uses: actions/checkout@v4
