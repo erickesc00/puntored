@@ -39,7 +39,7 @@ const buildReference = (overrides?: Partial<Record<string, unknown>>) => ({
   externalReference: 'EXT-REF-1',
   concept: 'Matrícula agosto',
   amount: 125050,
-  currency: 'COP',
+  currency: 'MXN',
   dueDate: '2026-08-20T15:00:00.000Z',
   status: 'PENDING',
   version: 1,

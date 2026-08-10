@@ -61,7 +61,7 @@ describe('reference rules', () => {
       normalizeCreateReferencePayload({
         concept: '  Pago   servicio ',
         amount: 125000,
-        currency: 'cop',
+        currency: 'mxn',
         dueDate: '2026-08-06T00:00:00.000Z',
       }),
     );
@@ -69,7 +69,7 @@ describe('reference rules', () => {
       normalizeCreateReferencePayload({
         concept: 'Pago servicio',
         amount: 125000,
-        currency: 'COP',
+        currency: 'MXN',
         dueDate: '2026-08-06T00:00:00.000Z',
       }),
     );
@@ -77,7 +77,7 @@ describe('reference rules', () => {
       normalizeCreateReferencePayload({
         concept: 'Pago servicio',
         amount: 125001,
-        currency: 'COP',
+        currency: 'MXN',
         dueDate: '2026-08-06T00:00:00.000Z',
       }),
     );

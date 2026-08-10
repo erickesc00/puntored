@@ -19,7 +19,7 @@ import {
 const defaultValues = (): CreateReferenceFormValues => ({
   concept: '',
   amount: '',
-  currency: 'COP',
+  currency: 'MXN',
   dueDate: '',
 });
 

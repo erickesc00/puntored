@@ -94,7 +94,7 @@ describe('PrismaReferenceRepository', () => {
       externalReference: null,
       concept: 'Cancel me',
       amount: BigInt(1000),
-      currency: 'COP',
+      currency: 'MXN',
       dueAt: new Date('2026-08-09T13:00:00.000Z'),
       status: ReferenceStatus.CANCELLED,
       version: 5,

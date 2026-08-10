@@ -211,6 +211,7 @@ npm run build
 - Contradictory provider events are rejected and audited so it is not a full reconciliation strategy.
 - The frontend depends on same-origin or reverse proxy deployment assumptions; cross-origin auth/CORS is intentionally out of scope.
 - Frontend runtime evidence uses Vitest + Testing Library rather than a browser-driven external E2E tool such as Playwright.
+- Currencies with 0 or 3 minor digits such as JPY, CLP, and KWD remain consciously unsupported debt because `frontend/src/features/references/shared/presentation.ts#formatMoney` still hardcodes `amount / 100` plus `minimumFractionDigits: 2`.
 
 ## Testing strategy
 

@@ -34,7 +34,6 @@ const jsonResponse = (status: number, body?: unknown) =>
 const fillValidForm = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.type(screen.getByLabelText(/Concepto de Recaudo/i), ' Matrícula agosto ');
   await user.type(screen.getByLabelText('Monto'), '1250.50');
-  await user.selectOptions(screen.getByLabelText(/Moneda/i), 'COP');
   await user.type(screen.getByLabelText(/Fecha de Vencimiento/i), '2026-08-20T10:00');
 };
 
@@ -76,9 +75,21 @@ describe('CreateReferenceForm', () => {
     expect(JSON.parse(String(request?.body))).toEqual({
       concept: 'Matrícula agosto',
       amount: 125050,
-      currency: 'COP',
+      currency: 'MXN',
       dueDate: new Date(2026, 7, 20, 10, 0, 0, 0).toISOString(),
     });
+  });
+
+  it('defaults the currency selector to MXN and keeps MXN first in the options list', () => {
+    render(<CreateReferenceForm />);
+
+    const currencySelect = screen.getByLabelText(/Moneda/i);
+    const optionLabels = screen
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+
+    expect(currencySelect).toHaveValue('MXN');
+    expect(optionLabels).toEqual(['MXN', 'COP', 'USD', 'EUR']);
   });
 
   it('blocks invalid form submissions before calling the API', async () => {

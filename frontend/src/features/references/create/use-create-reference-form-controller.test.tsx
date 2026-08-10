@@ -66,4 +66,10 @@ describe('useCreateReferenceFormController', () => {
     expect(createReferenceMock.mock.calls[0]?.[1]).toBe('intent-1');
     expect(createReferenceMock.mock.calls[1]?.[1]).toBe('intent-1');
   });
+
+  it('starts with MXN as the default currency', () => {
+    const { result } = renderHook(() => useCreateReferenceFormController());
+
+    expect(result.current.values.currency).toBe('MXN');
+  });
 });

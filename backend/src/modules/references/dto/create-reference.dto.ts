@@ -1,15 +1,20 @@
 import { Type } from 'class-transformer';
 import {
+  IsDefined,
   IsDateString,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsString,
-  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  SUPPORTED_CURRENCIES,
+  type SupportedCurrency,
+} from '../../../shared/vocabulary/supported-currencies';
 
 export class CreateReferenceDto {
   @ApiProperty({ maxLength: 255 })
@@ -25,10 +30,16 @@ export class CreateReferenceDto {
   @Max(Number.MAX_SAFE_INTEGER)
   amount!: number;
 
-  @ApiProperty({ pattern: '^[A-Za-z]{3}$', example: 'COP' })
+  @ApiProperty({
+    enum: SUPPORTED_CURRENCIES,
+    enumName: 'SupportedCurrency',
+    example: 'MXN',
+  })
+  @IsDefined()
   @IsString()
-  @Matches(/^[A-Za-z]{3}$/)
-  currency!: string;
+  @IsNotEmpty()
+  @IsIn(SUPPORTED_CURRENCIES)
+  currency!: SupportedCurrency;
 
   @ApiProperty({ format: 'date-time' })
   @IsDateString()

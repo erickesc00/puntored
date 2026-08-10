@@ -57,7 +57,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
   ) => ({
     concept: 'Pago de servicio público',
     amount: 125000,
-    currency: 'COP',
+    currency: 'MXN',
     dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   });
@@ -98,7 +98,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
       data: {
         concept: overrides?.concept ?? 'Reference fixture',
         amount: overrides?.amount ?? BigInt(50000),
-        currency: overrides?.currency ?? 'COP',
+        currency: overrides?.currency ?? 'MXN',
         dueAt: overrides?.dueAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
         status: overrides?.status ?? ReferenceStatus.PENDING,
         version: overrides?.version ?? 1,
@@ -233,6 +233,73 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     expect(await prisma.paymentReference.count()).toBe(0);
     expect(await prisma.idempotencyKey.count()).toBe(0);
     expect(providerStub.listRecords()).toHaveLength(0);
+  });
+
+  it.each(['MXN', 'COP', 'USD', 'EUR'])(
+    'creates references with supported currency %s',
+    async (currency) => {
+      const operatorCookie = await createSessionCookie(operatorUser.id);
+
+      const response = await request(getHttpServer())
+        .post('/api/references')
+        .set('Cookie', operatorCookie)
+        .set('Idempotency-Key', `supported-${currency}-${randomUUID()}`)
+        .send(buildCreatePayload({ currency }))
+        .expect(201);
+
+      expect(response.body.currency).toBe(currency);
+
+      const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+        where: { id: response.body.id as string },
+        select: { currency: true },
+      });
+
+      expect(persistedReference.currency).toBe(currency);
+    },
+  );
+
+  it.each(['JPY', 'XYZ', 'mxn'])(
+    'rejects unsupported or non-canonical currency %s with a 400',
+    async (currency) => {
+      const operatorCookie = await createSessionCookie(operatorUser.id);
+
+      const response = await request(getHttpServer())
+        .post('/api/references')
+        .set('Cookie', operatorCookie)
+        .set('Idempotency-Key', `invalid-${String(currency)}-${randomUUID()}`)
+        .send(buildCreatePayload({ currency }))
+        .expect(400);
+
+      expect(response.body.code).toBe('BAD_REQUEST');
+      expect(response.body.message).toBe('Validation failed');
+      expect(response.body.details).toEqual(
+        expect.arrayContaining([
+          'currency must be one of the following values: COP, MXN, USD, EUR',
+        ]),
+      );
+      expect(await prisma.paymentReference.count()).toBe(0);
+    },
+  );
+
+  it('rejects missing currency with a 400 instead of a downstream 500', async () => {
+    const operatorCookie = await createSessionCookie(operatorUser.id);
+
+    const payload = buildCreatePayload();
+    delete (payload as { currency?: string }).currency;
+
+    const response = await request(getHttpServer())
+      .post('/api/references')
+      .set('Cookie', operatorCookie)
+      .set('Idempotency-Key', `missing-currency-${randomUUID()}`)
+      .send(payload)
+      .expect(400);
+
+    expect(response.body.code).toBe('BAD_REQUEST');
+    expect(response.body.message).toBe('Validation failed');
+    expect(response.body.details).toEqual(
+      expect.arrayContaining(['currency should not be null or undefined']),
+    );
+    expect(await prisma.paymentReference.count()).toBe(0);
   });
 
   it('recovers safely when provider allocation succeeds before local persistence fails and the caller retries', async () => {
@@ -760,11 +827,12 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
         },
       },
       orderBy: { externalReference: 'asc' },
-      select: {
-        externalReference: true,
-        status: true,
-        version: true,
-      },
+        select: {
+          externalReference: true,
+          currency: true,
+          status: true,
+          version: true,
+        },
     });
 
     const auditCounts = await Promise.all(
@@ -786,6 +854,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     expect(references).toEqual(
       DEMO_REFERENCE_FIXTURES.map((fixture) => ({
         externalReference: fixture.externalReference,
+        currency: fixture.currency,
         status: fixture.status,
         version: fixture.history.length,
       })),

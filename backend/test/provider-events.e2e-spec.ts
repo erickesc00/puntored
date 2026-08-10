@@ -72,7 +72,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       data: {
         concept: 'Provider fixture reference',
         amount: BigInt(125000),
-        currency: 'COP',
+        currency: 'MXN',
         dueAt: overrides?.dueAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
         status: overrides?.status ?? ReferenceStatus.PENDING,
         version: overrides?.version ?? 1,

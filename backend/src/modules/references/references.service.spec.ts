@@ -60,7 +60,7 @@ describe('CancelReferenceUseCase', () => {
       externalReference: null,
       concept: 'Late cancel race',
       amount: BigInt(1000),
-      currency: 'COP',
+      currency: 'MXN',
       dueAt: new Date('2026-08-09T12:00:01.000Z'),
       status: ReferenceStatus.PENDING,
       version: 7,

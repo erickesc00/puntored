@@ -38,7 +38,7 @@ const buildDetailResponse = (version: number, status: 'PENDING' | 'CANCELLED' = 
     externalReference: 'EXT-REF-1',
     concept: 'Matrícula agosto',
     amount: 125050,
-    currency: 'COP',
+    currency: 'MXN',
     dueDate: '2026-08-20T15:00:00.000Z',
     status,
     version,

@@ -14,6 +14,9 @@ export interface CreateReferenceValidationResult {
   errors: Partial<Record<keyof CreateReferenceFormValues, string>>;
 }
 
+export const SUPPORTED_CURRENCIES = ['MXN', 'COP', 'USD', 'EUR'] as const;
+type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
 const toUtcIsoFromLocalInput = (value: string) => {
   const normalized = value.trim();
   const match = normalized.match(
@@ -41,6 +44,9 @@ const toUtcIsoFromLocalInput = (value: string) => {
 const normalizeConcept = (value: string) => value.trim().replace(/\s+/g, ' ');
 
 const normalizeCurrency = (value: string) => value.trim().toUpperCase();
+
+const isSupportedCurrency = (value: string): value is SupportedCurrency =>
+  SUPPORTED_CURRENCIES.includes(value as SupportedCurrency);
 
 const parseMinorUnits = (value: string) => {
   const normalized = value.trim().replace(',', '.');
@@ -74,8 +80,8 @@ export const validateCreateReference = (
     errors.amount = 'Ingresa un monto válido con hasta dos decimales.';
   }
 
-  if (!/^[A-Z]{3}$/.test(currency)) {
-    errors.currency = 'Ingresa una moneda de tres letras, por ejemplo COP.';
+  if (!isSupportedCurrency(currency)) {
+    errors.currency = 'Selecciona una moneda válida: MXN, COP, USD o EUR.';
   }
 
   if (!dueDate || Number.isNaN(dueDate.getTime())) {
@@ -95,7 +101,7 @@ export const validateCreateReference = (
     payload: {
       concept,
       amount: minorAmount!,
-      currency,
+      currency: currency as SupportedCurrency,
       dueDate: dueDateIso!,
     },
     errors: {},

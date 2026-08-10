@@ -7,9 +7,9 @@ import {
 const payload = {
   concept: 'Invoice 1001',
   amount: 125050,
-  currency: 'COP',
+  currency: 'MXN',
   dueDate: '2026-08-20T10:00:00.000Z',
-};
+} as const;
 
 describe('idempotency intent', () => {
   it('reuses the same key for the same submission intent', () => {

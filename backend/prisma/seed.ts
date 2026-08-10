@@ -35,7 +35,7 @@ export const DEMO_REFERENCE_FIXTURES: DemoReferenceFixture[] = [
     externalReference: 'DEMO-CANCELLED-001',
     concept: 'Cancelled insurance installment',
     amount: 210500,
-    currency: 'COP',
+    currency: 'MXN',
     dueAt: '2099-12-15T12:00:00.000Z',
     status: ReferenceStatus.CANCELLED,
     history: [
@@ -63,7 +63,7 @@ export const DEMO_REFERENCE_FIXTURES: DemoReferenceFixture[] = [
     externalReference: 'DEMO-EXPIRED-001',
     concept: 'Expired telecom bill',
     amount: 76000,
-    currency: 'COP',
+    currency: 'MXN',
     dueAt: '2025-01-10T12:00:00.000Z',
     status: ReferenceStatus.EXPIRED,
     history: [
@@ -85,7 +85,7 @@ export const DEMO_REFERENCE_FIXTURES: DemoReferenceFixture[] = [
     externalReference: 'DEMO-PAID-001',
     concept: 'Paid school fee',
     amount: 98000,
-    currency: 'COP',
+    currency: 'MXN',
     dueAt: '2099-12-20T12:00:00.000Z',
     status: ReferenceStatus.PAID,
     providerEventId: 'demo-provider-paid-001',
@@ -109,7 +109,7 @@ export const DEMO_REFERENCE_FIXTURES: DemoReferenceFixture[] = [
     externalReference: 'DEMO-PENDING-001',
     concept: 'Pending utility payment',
     amount: 125000,
-    currency: 'COP',
+    currency: 'MXN',
     dueAt: '2099-12-31T12:00:00.000Z',
     status: ReferenceStatus.PENDING,
     history: [

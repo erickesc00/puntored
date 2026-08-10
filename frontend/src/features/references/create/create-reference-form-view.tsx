@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { FeedbackBanner } from '@/components/feedback-banner';
 import type { CreateReferenceFormController } from './use-create-reference-form-controller';
+import { SUPPORTED_CURRENCIES } from './validation';
 
 export function CreateReferenceFormView({
   controller,
@@ -104,9 +105,11 @@ export function CreateReferenceFormView({
                 onChange={(event) => setCurrency(event.target.value)}
                 value={values.currency}
               >
-                <option value="COP">COP</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
+                {SUPPORTED_CURRENCIES.map((currency) => (
+                  <option key={currency} value={currency}>
+                    {currency}
+                  </option>
+                ))}
               </select>
               {fieldErrors.currency ? (
                 <span className="field-error" id="currency-error">

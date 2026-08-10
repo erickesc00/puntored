@@ -231,11 +231,13 @@ export interface components {
             duplicate: boolean;
             reference: components["schemas"]["ReferenceResponseDto"];
         };
+        /** @enum {string} */
+        SupportedCurrency: "COP" | "MXN" | "USD" | "EUR";
         CreateReferenceDto: {
             concept: string;
             amount: number;
-            /** @example COP */
-            currency: string;
+            /** @example MXN */
+            currency: components["schemas"]["SupportedCurrency"];
             /** Format: date-time */
             dueDate: string;
         };

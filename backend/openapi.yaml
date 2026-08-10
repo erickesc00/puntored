@@ -450,6 +450,13 @@ components:
         - outcome
         - duplicate
         - reference
+    SupportedCurrency:
+      type: string
+      enum:
+        - COP
+        - MXN
+        - USD
+        - EUR
     CreateReferenceDto:
       type: object
       properties:
@@ -460,9 +467,9 @@ components:
           type: number
           minimum: 1
         currency:
-          type: string
-          pattern: ^[A-Za-z]{3}$
-          example: COP
+          example: MXN
+          allOf:
+            - $ref: "#/components/schemas/SupportedCurrency"
         dueDate:
           type: string
           format: date-time

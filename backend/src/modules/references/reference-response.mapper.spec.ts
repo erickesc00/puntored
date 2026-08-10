@@ -18,7 +18,7 @@ describe('reference-response.mapper', () => {
           externalReference: null,
           concept: 'Expired by read model',
           amount: BigInt(1000),
-          currency: 'COP',
+          currency: 'MXN',
           dueAt: new Date('2026-08-09T11:00:00.000Z'),
           status: ReferenceStatus.PENDING,
           version: 1,
