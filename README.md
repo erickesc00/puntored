@@ -72,7 +72,7 @@ Use this only if you need to debug the API in isolation.
 ```bash
 cd backend
 cp .env.example .env
-docker compose up -d mysql
+docker compose -f ../docker-compose.yml up -d mysql
 npx prisma migrate deploy
 npx prisma db seed
 # Optional bulk reference dataset through the same seed entrypoint
