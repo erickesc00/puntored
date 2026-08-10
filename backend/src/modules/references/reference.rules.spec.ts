@@ -1,4 +1,5 @@
 import { ReferenceStatus } from '@prisma/client';
+import { IDEMPOTENCY_SCOPE } from '../../shared/vocabulary/idempotency-scopes';
 import {
   buildDeterministicReferenceId,
   canAutoExpireReference,
@@ -88,26 +89,26 @@ describe('reference rules', () => {
   it('builds the same deterministic reference id for the same scope actor and idempotency key', () => {
     expect(
       buildDeterministicReferenceId(
-        'payment-reference:create',
+        IDEMPOTENCY_SCOPE.REFERENCE_CREATE,
         'user-1',
         'intent-1',
       ),
     ).toBe(
       buildDeterministicReferenceId(
-        'payment-reference:create',
+        IDEMPOTENCY_SCOPE.REFERENCE_CREATE,
         'user-1',
         'intent-1',
       ),
     );
     expect(
       buildDeterministicReferenceId(
-        'payment-reference:create',
+        IDEMPOTENCY_SCOPE.REFERENCE_CREATE,
         'user-1',
         'intent-1',
       ),
     ).not.toBe(
       buildDeterministicReferenceId(
-        'payment-reference:create',
+        IDEMPOTENCY_SCOPE.REFERENCE_CREATE,
         'user-1',
         'intent-2',
       ),
@@ -117,9 +118,9 @@ describe('reference rules', () => {
   it('identifies overdue pending references as auto-expiration candidates', () => {
     const now = new Date('2026-08-05T12:00:00.000Z');
 
-    expect(
-      isReferenceOverdue(new Date('2026-08-05T11:59:59.000Z'), now),
-    ).toBe(true);
+    expect(isReferenceOverdue(new Date('2026-08-05T11:59:59.000Z'), now)).toBe(
+      true,
+    );
     expect(
       canAutoExpireReference(
         ReferenceStatus.PENDING,

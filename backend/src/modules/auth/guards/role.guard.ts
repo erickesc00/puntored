@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
+import { ERROR_CODE } from '../../../shared/vocabulary/error-codes';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { SessionAuth } from './session.guard';
 
@@ -28,7 +29,7 @@ export class RoleGuard implements CanActivate {
       .getRequest<Request & { auth?: SessionAuth }>();
     if (!request.auth || !roles.includes(request.auth.role)) {
       throw new ForbiddenException({
-        code: 'FORBIDDEN',
+        code: ERROR_CODE.FORBIDDEN,
         message: 'You do not have access to this resource',
       });
     }

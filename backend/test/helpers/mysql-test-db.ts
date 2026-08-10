@@ -137,7 +137,8 @@ export function applyTestEnvironment(options?: {
   process.env.REFERENCE_EXPIRATION_BATCH_SIZE =
     process.env.REFERENCE_EXPIRATION_BATCH_SIZE ?? '100';
   process.env.REFERENCE_EXPIRATION_ACTOR_ID =
-    process.env.REFERENCE_EXPIRATION_ACTOR_ID ?? 'system:test-reference-expirer';
+    process.env.REFERENCE_EXPIRATION_ACTOR_ID ??
+    'system:test-reference-expirer';
 }
 
 export async function ensureTestDatabaseReady(options?: {

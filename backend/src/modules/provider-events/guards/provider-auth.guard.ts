@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AppConfigService } from '../../../common/config/app-config.service';
+import { ERROR_CODE } from '../../../shared/vocabulary/error-codes';
 
 @Injectable()
 export class ProviderAuthGuard implements CanActivate {
@@ -20,7 +21,7 @@ export class ProviderAuthGuard implements CanActivate {
       sharedSecretHeader !== this.config.provider.sharedSecret
     ) {
       throw new UnauthorizedException({
-        code: 'PROVIDER_UNAUTHORIZED',
+        code: ERROR_CODE.PROVIDER_UNAUTHORIZED,
         message: 'Provider authentication failed',
       });
     }

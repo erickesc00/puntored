@@ -9,11 +9,9 @@ describe('SessionGuard', () => {
   };
 
   const prisma = {
-    session: {
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      deleteMany: jest.fn(),
-    },
+    findSessionWithUser: jest.fn(),
+    refreshSession: jest.fn(),
+    deleteSession: jest.fn(),
   };
 
   const config = {
@@ -23,7 +21,7 @@ describe('SessionGuard', () => {
     },
   };
 
-  const authService = {
+  const sessionCookie = {
     clearSessionCookie: jest.fn(),
     setSessionCookie: jest.fn(),
   };
@@ -37,7 +35,7 @@ describe('SessionGuard', () => {
       reflector as unknown as Reflector,
       prisma as never,
       config as never,
-      authService as never,
+      sessionCookie as never,
     );
   });
 
@@ -46,7 +44,7 @@ describe('SessionGuard', () => {
   });
 
   it('rejects expired sessions and deletes them from persistence', async () => {
-    prisma.session.findUnique.mockResolvedValue({
+    prisma.findSessionWithUser.mockResolvedValue({
       id: 'session-1',
       expiresAt: new Date(Date.now() - 1_000),
       absoluteExpiresAt: new Date(Date.now() + 1_000),
@@ -72,15 +70,13 @@ describe('SessionGuard', () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
-    expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-      where: { id: 'session-1' },
-    });
-    expect(authService.clearSessionCookie).toHaveBeenCalledTimes(1);
+    expect(prisma.deleteSession).toHaveBeenCalledWith('session-1');
+    expect(sessionCookie.clearSessionCookie).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes the persisted session and reissues the cookie for active requests', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-05T12:00:00.000Z'));
-    prisma.session.findUnique.mockResolvedValue({
+    prisma.findSessionWithUser.mockResolvedValue({
       id: 'session-1',
       expiresAt: new Date('2026-08-05T12:05:00.000Z'),
       absoluteExpiresAt: new Date('2026-08-05T18:00:00.000Z'),
@@ -109,14 +105,12 @@ describe('SessionGuard', () => {
 
     const expectedExpiry = new Date('2026-08-05T12:30:00.000Z');
 
-    expect(prisma.session.update).toHaveBeenCalledWith({
-      where: { id: 'session-1' },
-      data: {
-        lastSeenAt: new Date('2026-08-05T12:00:00.000Z'),
-        expiresAt: expectedExpiry,
-      },
-    });
-    expect(authService.setSessionCookie).toHaveBeenCalledWith(
+    expect(prisma.refreshSession).toHaveBeenCalledWith(
+      'session-1',
+      new Date('2026-08-05T12:00:00.000Z'),
+      expectedExpiry,
+    );
+    expect(sessionCookie.setSessionCookie).toHaveBeenCalledWith(
       response,
       'session-1',
       expectedExpiry,

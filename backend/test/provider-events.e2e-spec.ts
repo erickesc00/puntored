@@ -5,6 +5,8 @@ import { ReferenceStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { PrismaService } from '../src/common/prisma/prisma.service';
+import { ERROR_CODE } from '../src/shared/vocabulary/error-codes';
+import { PROVIDER_EVENT_OUTCOME } from '../src/shared/vocabulary/provider-event-outcomes';
 import { createRealTestApp } from './helpers/create-real-test-app';
 import { getSeedUsers, resetTestDatabase } from './helpers/mysql-test-db';
 
@@ -106,7 +108,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       .send(providerPayload(reference.id))
       .expect(401);
 
-    expect(response.body.code).toBe('PROVIDER_UNAUTHORIZED');
+    expect(response.body.code).toBe(ERROR_CODE.PROVIDER_UNAUTHORIZED);
   });
 
   it('marks a pending reference as paid, persists provider idempotency evidence, and exposes provider metrics', async () => {
@@ -123,7 +125,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
 
     expect(response.body).toMatchObject({
       providerEventId: payload.providerEventId,
-      outcome: 'SUCCESS',
+      outcome: PROVIDER_EVENT_OUTCOME.SUCCESS,
       duplicate: false,
       reference: {
         id: reference.id,
@@ -151,7 +153,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
     expect(providerEvents[0]).toMatchObject({
       providerEventId: payload.providerEventId,
       referenceId: reference.id,
-      outcome: 'SUCCESS',
+      outcome: PROVIDER_EVENT_OUTCOME.SUCCESS,
       eventType: 'PAID',
     });
     expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
@@ -186,7 +188,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
 
     expect(duplicateResponse.body).toMatchObject({
       providerEventId: payload.providerEventId,
-      outcome: 'DUPLICATE',
+      outcome: PROVIDER_EVENT_OUTCOME.DUPLICATE,
       duplicate: true,
       reference: {
         id: reference.id,
@@ -227,7 +229,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       .send(payload)
       .expect(409);
 
-    expect(conflictResponse.body.code).toBe('PROVIDER_EVENT_CONFLICT');
+    expect(conflictResponse.body.code).toBe(ERROR_CODE.PROVIDER_EVENT_CONFLICT);
 
     const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
       where: { id: reference.id },
@@ -244,7 +246,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
     expect(providerEvents[0]).toMatchObject({
       providerEventId: payload.providerEventId,
       referenceId: reference.id,
-      outcome: 'REJECTED_TERMINAL_STATE',
+      outcome: PROVIDER_EVENT_OUTCOME.REJECTED_TERMINAL_STATE,
     });
     expect(auditRows.map((row) => `${row.action}:${row.result}`)).toEqual([
       'CANCEL_ATTEMPT:STARTED',
@@ -261,7 +263,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       version: 1,
     });
     const payload = providerPayload(reference.id, {
-      externalReference: 'EXT-EXPIRE-RACE-PAID-001',
+      externalReference: reference.externalReference,
     });
 
     await request(getHttpServer())
@@ -401,7 +403,12 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
         auditRows.some(
           (row) =>
             row.action === 'PROVIDER_EVENT' &&
-            ['SUCCESS', 'ACCEPTED_ALREADY_PAID'].includes(row.result),
+            (
+              [
+                PROVIDER_EVENT_OUTCOME.SUCCESS,
+                PROVIDER_EVENT_OUTCOME.ACCEPTED_ALREADY_PAID,
+              ] as string[]
+            ).includes(row.result),
         ),
       ).toBe(true);
       expect(
@@ -414,7 +421,9 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
     } else {
       expect(providerResult.value.status).toBe(409);
       expect(cancelResult.value.status).toBe(201);
-      expect(providerEvents[0]?.outcome).toBe('REJECTED_TERMINAL_STATE');
+      expect(providerEvents[0]?.outcome).toBe(
+        PROVIDER_EVENT_OUTCOME.REJECTED_TERMINAL_STATE,
+      );
       expect(
         auditRows.some(
           (row) =>
@@ -448,7 +457,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
 
     expect(response.body).toMatchObject({
       providerEventId: payload.providerEventId,
-      outcome: 'SUCCESS',
+      outcome: PROVIDER_EVENT_OUTCOME.SUCCESS,
       duplicate: false,
       reference: {
         id: reference.id,
@@ -522,7 +531,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       .send(payload)
       .expect(409);
 
-    expect(conflictResponse.body.code).toBe('PROVIDER_EVENT_CONFLICT');
+    expect(conflictResponse.body.code).toBe(ERROR_CODE.PROVIDER_EVENT_CONFLICT);
 
     const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
       where: { id: reference.id },
@@ -550,7 +559,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       .expect(409);
 
     expect(conflictResponse.body.code).toBe(
-      'PROVIDER_EXTERNAL_REFERENCE_CONFLICT',
+      ERROR_CODE.PROVIDER_EXTERNAL_REFERENCE_CONFLICT,
     );
   });
 });

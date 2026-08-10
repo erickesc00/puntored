@@ -7,6 +7,8 @@ import {
   Injectable,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { ApplicationHttpError } from '../errors/application-http.error';
+import { ERROR_CODE } from '../../shared/vocabulary/error-codes';
 
 @Injectable()
 @Catch()
@@ -20,12 +22,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+        : exception instanceof ApplicationHttpError
+          ? exception.statusCode
+          : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const body =
       exception instanceof HttpException
         ? exception.getResponse()
-        : { message: 'Internal server error' };
+        : exception instanceof ApplicationHttpError
+          ? exception.getResponse()
+          : { message: 'Internal server error' };
 
     const normalized = this.normalizeBody(body, status);
 
@@ -69,12 +75,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   private defaultCode(status: number) {
-    if (status === 400) return 'BAD_REQUEST';
-    if (status === 401) return 'UNAUTHENTICATED';
-    if (status === 403) return 'FORBIDDEN';
-    if (status === 404) return 'NOT_FOUND';
-    if (status === 409) return 'CONFLICT';
-    if (status === 429) return 'RATE_LIMITED';
-    return 'INTERNAL_ERROR';
+    if (status === 400) return ERROR_CODE.BAD_REQUEST;
+    if (status === 401) return ERROR_CODE.UNAUTHENTICATED;
+    if (status === 403) return ERROR_CODE.FORBIDDEN;
+    if (status === 404) return ERROR_CODE.NOT_FOUND;
+    if (status === 409) return ERROR_CODE.CONFLICT;
+    if (status === 429) return ERROR_CODE.RATE_LIMITED;
+    return ERROR_CODE.INTERNAL_ERROR;
   }
 }
