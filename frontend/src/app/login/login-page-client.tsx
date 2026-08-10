@@ -2,7 +2,9 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { FeedbackBanner } from "@/components/feedback-banner";
 import { ApiClientError } from "@/lib/api/errors";
+import { sanitizeReturnTo } from "@/lib/navigation/return-to";
 import { useSession } from "@/lib/session/session-provider";
 import styles from "./login-page-client.module.css";
 
@@ -22,17 +24,7 @@ export function LoginPageClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const returnTo = useMemo(() => {
-    const requested = searchParams.get("returnTo");
-
-    if (
-      !requested ||
-      !requested.startsWith("/") ||
-      requested.startsWith("//")
-    ) {
-      return "/references";
-    }
-
-    return requested;
+    return sanitizeReturnTo(searchParams.get("returnTo"));
   }, [searchParams]);
 
   const reasonCode = searchParams.get("reason") ?? "";
@@ -86,15 +78,15 @@ export function LoginPageClient() {
         </div>
 
         {reasonMessageByCode[reasonCode] ? (
-          <div className={styles.notice} role="status">
+          <FeedbackBanner className={styles.notice} tone="notice">
             {reasonMessageByCode[reasonCode]}
-          </div>
+          </FeedbackBanner>
         ) : null}
 
         {errorMessage ? (
-          <div className={styles.errorBanner} role="alert" aria-live="polite">
+          <FeedbackBanner className={styles.errorBanner} tone="error">
             {errorMessage}
-          </div>
+          </FeedbackBanner>
         ) : null}
 
         <form className={styles.form} onSubmit={handleSubmit}>

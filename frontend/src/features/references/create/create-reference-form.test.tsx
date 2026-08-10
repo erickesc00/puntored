@@ -140,4 +140,56 @@ describe('CreateReferenceForm', () => {
     expect(firstHeaders.get('Idempotency-Key')).toBe('intent-1');
     expect(secondHeaders.get('Idempotency-Key')).toBe('intent-1');
   });
+
+  it('guides recovery from idempotency conflicts by rotating the next request key', async () => {
+    vi.spyOn(globalThis.crypto, 'randomUUID')
+      .mockReturnValueOnce('intent-1')
+      .mockReturnValueOnce('intent-2');
+
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse(409, {
+          code: 'IDEMPOTENCY_CONFLICT',
+          message: 'Conflict',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(201, {
+          id: 'ref-2',
+          externalReference: 'EXT-REF-2',
+        }),
+      );
+
+    const user = userEvent.setup();
+
+    render(<CreateReferenceForm />);
+    await fillValidForm(user);
+
+    await user.click(screen.getByRole('button', { name: 'Crear referencia' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Detectamos un conflicto con la protección contra duplicados. Ya preparamos un intento nuevo para que revises los datos y vuelvas a enviarlos.',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Crear referencia' }));
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/references?created=ref-2');
+    });
+
+    const firstHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const secondHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
+
+    expect(firstHeaders.get('Idempotency-Key')).toBe('intent-1');
+    expect(secondHeaders.get('Idempotency-Key')).toBe('intent-2');
+  });
+
+  it('does not render the removed retry reset button', () => {
+    render(<CreateReferenceForm />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Reiniciar intento' }),
+    ).not.toBeInTheDocument();
+  });
 });

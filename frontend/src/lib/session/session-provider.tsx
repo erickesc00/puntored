@@ -12,6 +12,12 @@ import {
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/api/client';
 import { ApiClientError, isSessionLossError } from '@/lib/api/errors';
+import {
+  buildCurrentUrl,
+  DEFAULT_RETURN_TO,
+  sanitizeReturnTo,
+} from '@/lib/navigation/return-to';
+import { FeedbackBanner } from '@/components/feedback-banner';
 
 type SessionStatus = 'idle' | 'loading' | 'authenticated' | 'anonymous';
 type AuthLossReason = 'required' | 'expired';
@@ -56,17 +62,8 @@ interface SessionContextValue {
 }
 
 const LOGIN_PATH = '/login';
-const DEFAULT_PROTECTED_PATH = '/references';
 
 const SessionContext = createContext<SessionContextValue | null>(null);
-
-const sanitizeReturnTo = (returnTo?: string | null) => {
-  if (!returnTo || !returnTo.startsWith('/') || returnTo.startsWith('//')) {
-    return DEFAULT_PROTECTED_PATH;
-  }
-
-  return returnTo;
-};
 
 const toAuthLossReason = (error: ApiClientError): AuthLossReason =>
   error.code === 'SESSION_EXPIRED' ? 'expired' : 'required';
@@ -79,7 +76,7 @@ const buildLoginHref = (reason?: AuthLossReason, returnTo?: string) => {
   }
 
   const safeReturnTo = sanitizeReturnTo(returnTo);
-  if (safeReturnTo !== DEFAULT_PROTECTED_PATH) {
+  if (safeReturnTo !== DEFAULT_RETURN_TO) {
     params.set('returnTo', safeReturnTo);
   }
 
@@ -229,8 +226,7 @@ export function ProtectedRouteGate({ children }: { children: ReactNode }) {
   const { bootstrapError, logout, refreshSession, status, user } = useSession();
 
   const returnTo = useMemo(() => {
-    const query = searchParams.toString();
-    return query.length > 0 ? `${pathname}?${query}` : pathname;
+    return buildCurrentUrl(pathname, searchParams);
   }, [pathname, searchParams]);
 
   useEffect(() => {
@@ -255,21 +251,25 @@ export function ProtectedRouteGate({ children }: { children: ReactNode }) {
       return (
         <div className="loading-shell">
           <div className="card stack">
-            <div className="error-banner" role="alert" aria-live="polite">
-              {bootstrapError}
-            </div>
-            <button
-              className="secondary-button"
-              onClick={() => {
-                void refreshSession({
-                  redirectOnAuthLoss: true,
-                  returnTo,
-                }).catch(() => undefined);
-              }}
-              type="button"
+            <FeedbackBanner
+              tone="error"
+              actions={
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    void refreshSession({
+                      redirectOnAuthLoss: true,
+                      returnTo,
+                    }).catch(() => undefined);
+                  }}
+                  type="button"
+                >
+                  Reintentar
+                </button>
+              }
             >
-              Reintentar
-            </button>
+              {bootstrapError}
+            </FeedbackBanner>
           </div>
         </div>
       );
