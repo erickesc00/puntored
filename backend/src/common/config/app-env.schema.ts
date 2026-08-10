@@ -45,9 +45,7 @@ export const appEnvSchema = z.object({
   REFERENCE_EXPIRATION_ENABLED: toBoolean(false),
   REFERENCE_EXPIRATION_CRON: z.string().default('* * * * *'),
   REFERENCE_EXPIRATION_BATCH_SIZE: toNumber(100),
-  REFERENCE_EXPIRATION_ACTOR_ID: z
-    .string()
-    .default('system:reference-expirer'),
+  REFERENCE_EXPIRATION_ACTOR_ID: z.string().default('system:reference-expirer'),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Inject,
   Post,
   Req,
   Res,
@@ -10,6 +11,10 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
+import {
+  SESSION_COOKIE_PORT,
+  type SessionCookiePort,
+} from './application/ports/session-cookie.port';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { SessionAuth, SessionGuard } from './guards/session.guard';
@@ -18,7 +23,11 @@ import { AuthService } from './auth.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    @Inject(SESSION_COOKIE_PORT)
+    private readonly sessionCookie: SessionCookiePort,
+  ) {}
 
   @Public()
   @Post('login')
@@ -58,12 +67,12 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     await this.authService.logout(request.auth?.sessionId ?? null);
-    this.authService.clearSessionCookie(response);
+    this.sessionCookie.clearSessionCookie(response);
   }
 
   @UseGuards(SessionGuard)
   @Get('me')
   getCurrentSession(@CurrentUser() user: SessionAuth) {
-    return { user };
+    return this.authService.getCurrentSession(user);
   }
 }

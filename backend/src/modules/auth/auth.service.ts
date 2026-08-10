@@ -1,123 +1,29 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { compare } from 'bcrypt';
-import { randomUUID } from 'node:crypto';
-import type { Response } from 'express';
+import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { AppConfigService } from '../../common/config/app-config.service';
-import { MetricsService } from '../../common/metrics/metrics.service';
-import { PrismaService } from '../../common/prisma/prisma.service';
 import type { LoginDto } from './dto/login.dto';
+import { GetCurrentSessionUseCase } from './application/use-cases/get-current-session.use-case';
+import { LoginUseCase } from './application/use-cases/login.use-case';
+import { LogoutUseCase } from './application/use-cases/logout.use-case';
+import type { SessionAuth } from './guards/session.guard';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: AppConfigService,
-    private readonly metricsService: MetricsService,
+    private readonly loginUseCase: LoginUseCase,
+    private readonly logoutUseCase: LogoutUseCase,
+    private readonly getCurrentSessionUseCase: GetCurrentSessionUseCase,
   ) {}
 
   async login(credentials: LoginDto, ipAddress?: string, userAgent?: string) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { username: credentials.username },
-          { email: credentials.username },
-        ],
-        active: true,
-      },
-    });
-
-    if (!user) {
-      this.metricsService.recordLoginAttempt('failure');
-      throw new UnauthorizedException({
-        code: 'INVALID_CREDENTIALS',
-        message: 'Invalid credentials',
-      });
-    }
-
-    const passwordMatches = await compare(
-      credentials.password,
-      user.passwordHash,
-    );
-    if (!passwordMatches) {
-      this.metricsService.recordLoginAttempt('failure');
-      throw new UnauthorizedException({
-        code: 'INVALID_CREDENTIALS',
-        message: 'Invalid credentials',
-      });
-    }
-
-    const now = new Date();
-    const expiresAt = new Date(
-      now.getTime() + this.config.session.idleTtlMinutes * 60 * 1000,
-    );
-    const absoluteExpiresAt = new Date(
-      now.getTime() + this.config.session.absoluteTtlHours * 60 * 60 * 1000,
-    );
-    const sessionId = randomUUID();
-
-    await this.prisma.session.create({
-      data: {
-        id: sessionId,
-        userId: user.id,
-        expiresAt,
-        absoluteExpiresAt,
-        lastSeenAt: now,
-        ipAddress,
-        userAgent,
-      },
-    });
-
-    this.metricsService.recordLoginAttempt('success');
-
-    return {
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-      },
-      session: {
-        id: sessionId,
-        expiresAt,
-        absoluteExpiresAt,
-      },
-      cookie: {
-        ...this.buildSessionCookie(sessionId, expiresAt),
-      },
-    };
-  }
-
-  buildSessionCookie(sessionId: string, expiresAt: Date) {
-    return {
-      name: this.config.session.cookieName,
-      value: sessionId,
-      options: {
-        ...this.config.session.cookieOptions,
-        expires: expiresAt,
-      },
-    };
-  }
-
-  setSessionCookie(response: Response, sessionId: string, expiresAt: Date) {
-    const cookie = this.buildSessionCookie(sessionId, expiresAt);
-    response.cookie(cookie.name, cookie.value, cookie.options);
+    return this.loginUseCase.execute(credentials, ipAddress, userAgent);
   }
 
   async logout(sessionId: string | null) {
-    if (!sessionId) {
-      return;
-    }
-
-    await this.prisma.session.deleteMany({
-      where: { id: sessionId },
-    });
+    await this.logoutUseCase.execute(sessionId);
   }
 
-  clearSessionCookie(response: Response) {
-    response.clearCookie(
-      this.config.session.cookieName,
-      this.config.session.cookieOptions,
-    );
+  getCurrentSession(user: SessionAuth) {
+    return this.getCurrentSessionUseCase.execute(user);
   }
 
   canCancel(role: UserRole) {

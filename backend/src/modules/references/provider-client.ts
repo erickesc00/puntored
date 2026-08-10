@@ -1,5 +1,6 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { AppConfigService } from '../../common/config/app-config.service';
+import { ERROR_CODE } from '../../shared/vocabulary/error-codes';
 
 export interface AllocateReferenceInput {
   backendReferenceId: string;
@@ -32,7 +33,7 @@ export class ProviderAllocationClient {
     if (!response.ok) {
       const errorPayload: unknown = await safeReadBody(response);
       throw new ServiceUnavailableException({
-        code: 'PROVIDER_ALLOCATION_FAILED',
+        code: ERROR_CODE.PROVIDER_ALLOCATION_FAILED,
         message: 'Provider allocation request failed',
         providerStatusCode: response.status,
         providerPayload: errorPayload,
@@ -43,7 +44,7 @@ export class ProviderAllocationClient {
 
     if (!isAllocateReferenceResult(data)) {
       throw new ServiceUnavailableException({
-        code: 'PROVIDER_ALLOCATION_INVALID_RESPONSE',
+        code: ERROR_CODE.PROVIDER_ALLOCATION_INVALID_RESPONSE,
         message: 'Provider allocation returned an invalid response',
       });
     }
@@ -72,7 +73,7 @@ export class ProviderAllocationClient {
       );
     } catch (error) {
       throw new ServiceUnavailableException({
-        code: 'PROVIDER_ALLOCATION_UNAVAILABLE',
+        code: ERROR_CODE.PROVIDER_ALLOCATION_UNAVAILABLE,
         message: 'Provider allocation service is unavailable',
         cause: error instanceof Error ? error.message : 'unknown',
       });

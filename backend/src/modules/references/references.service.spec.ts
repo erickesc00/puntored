@@ -1,72 +1,45 @@
-import { ConflictException } from '@nestjs/common';
 import { ReferenceStatus } from '@prisma/client';
-import { ReferencesService } from './references.service';
+import { ApplicationHttpError } from '../../common/errors/application-http.error';
+import { AUDIT_RESULT } from '../../shared/vocabulary/audit-results';
+import { ERROR_CODE } from '../../shared/vocabulary/error-codes';
+import { CancelReferenceUseCase } from './application/use-cases/cancel-reference.use-case';
+import { REFERENCE_CANCEL_OUTCOME } from './domain/references.constants';
 
-describe('ReferencesService', () => {
+describe('CancelReferenceUseCase', () => {
   const baseNow = new Date('2026-08-09T12:00:00.000Z');
   const justBeforeExpiry = new Date('2026-08-09T12:00:00.500Z');
   const justAfterExpiry = new Date('2026-08-09T12:00:01.500Z');
-  type UpdateManyArgs = {
-    where: {
-      id: string;
-      version: number;
-      status: ReferenceStatus;
-      dueAt: { gt: Date };
-    };
-    data: {
-      status: ReferenceStatus;
-      version: { increment: number };
-    };
+  type CancelArgs = {
+    referenceId: string;
+    expectedVersion: number;
+    transitionCutoff: Date;
+    actorId: string;
+    correlationId?: string;
   };
   type AuditCreateArgs = {
-    data: {
-      referenceId: string;
-      result: string;
-      metadataJson: { currentStatus: ReferenceStatus };
-    };
+    referenceId?: string;
+    result: string;
+    metadataJson?: { currentStatus?: ReferenceStatus };
   };
 
-  const createService = () => {
-    const tx = {
-      paymentReference: {
-        updateMany: jest.fn(),
-        findUnique: jest.fn(),
-      },
-      auditEvent: {
-        create: jest.fn().mockResolvedValue(undefined),
-      },
+  const createUseCase = () => {
+    const repository = {
+      findReferenceById: jest.fn(),
+      appendAuditEvent: jest.fn().mockResolvedValue(undefined),
+      cancelPendingReference: jest.fn(),
+      findReferenceStatusSnapshot: jest.fn(),
     };
-    const prisma = {
-      paymentReference: {
-        findUnique: jest.fn(),
-      },
-      auditEvent: {
-        create: jest.fn().mockResolvedValue(undefined),
-      },
-      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
-        callback(tx),
-      ),
-      idempotencyKey: {
-        findUnique: jest.fn(),
-      },
-    };
-    const metricsService = {
+    const metrics = {
       recordReferenceCancel: jest.fn(),
-      recordReferenceCreate: jest.fn(),
-    };
-    const providerAllocationClient = {
-      isEnabled: false,
     };
 
     return {
-      service: new ReferencesService(
-        prisma as never,
-        metricsService as never,
-        providerAllocationClient as never,
+      useCase: new CancelReferenceUseCase(
+        repository as never,
+        metrics as never,
       ),
-      prisma,
-      tx,
-      metricsService,
+      repository,
+      metrics,
     };
   };
 
@@ -81,7 +54,7 @@ describe('ReferencesService', () => {
   });
 
   it('rejects cancellation when the row expires before the transactional update can claim it', async () => {
-    const { service, prisma, tx, metricsService } = createService();
+    const { useCase, repository, metrics } = createUseCase();
     const reference = {
       id: 'ref-1',
       externalReference: null,
@@ -101,19 +74,18 @@ describe('ReferencesService', () => {
       },
     };
 
-    prisma.paymentReference.findUnique
-      .mockResolvedValueOnce(reference)
-      .mockResolvedValueOnce({
-        version: reference.version,
-        status: ReferenceStatus.PENDING,
-        dueAt: reference.dueAt,
-      });
-    tx.paymentReference.updateMany.mockImplementation(() => {
+    repository.findReferenceById.mockResolvedValueOnce(reference);
+    repository.cancelPendingReference.mockImplementation(() => {
       jest.setSystemTime(justAfterExpiry);
-      return Promise.resolve({ count: 0 });
+      return Promise.resolve(null);
+    });
+    repository.findReferenceStatusSnapshot.mockResolvedValueOnce({
+      version: reference.version,
+      status: ReferenceStatus.PENDING,
+      dueAt: reference.dueAt,
     });
 
-    const pendingResult = service.cancelReference(
+    const pendingResult = useCase.execute(
       reference.id,
       { version: reference.version },
       {
@@ -122,52 +94,39 @@ describe('ReferencesService', () => {
       } as never,
     );
 
-    await expect(pendingResult).rejects.toBeInstanceOf(ConflictException);
+    await expect(pendingResult).rejects.toBeInstanceOf(ApplicationHttpError);
 
     let thrown: unknown;
     await pendingResult.catch((error: unknown) => {
       thrown = error;
     });
 
-    expect(thrown).toBeInstanceOf(ConflictException);
-    expect(
-      (thrown as ConflictException).getResponse() as {
-        code: string;
-        message: string;
-      },
-    ).toMatchObject({
-      code: 'REFERENCE_EXPIRED',
+    expect(thrown).toBeInstanceOf(ApplicationHttpError);
+    expect((thrown as ApplicationHttpError).getResponse()).toMatchObject({
+      code: ERROR_CODE.REFERENCE_EXPIRED,
       message: 'Expired references cannot be cancelled',
     });
 
-    const updateArgs = (
-      tx.paymentReference.updateMany.mock.calls as Array<[UpdateManyArgs]>
+    const cancelArgs = (
+      repository.cancelPendingReference.mock.calls as Array<[CancelArgs]>
     )[0]?.[0];
     const auditArgs = (
-      prisma.auditEvent.create.mock.calls as Array<[AuditCreateArgs]>
-    )[1]?.[0];
+      repository.appendAuditEvent.mock.calls as Array<[AuditCreateArgs]>
+    ).at(-1)?.[0];
 
-    expect(updateArgs).toBeDefined();
-    expect(auditArgs).toBeDefined();
-
-    expect(updateArgs?.where.id).toBe(reference.id);
-    expect(updateArgs?.where.version).toBe(reference.version);
-    expect(updateArgs?.where.status).toBe(ReferenceStatus.PENDING);
-    expect(updateArgs?.where.dueAt.gt).toBeInstanceOf(Date);
-    expect(updateArgs?.data).toEqual({
-      status: ReferenceStatus.CANCELLED,
-      version: {
-        increment: 1,
-      },
-    });
-    expect(auditArgs?.data.referenceId).toBe(reference.id);
-    expect(auditArgs?.data.result).toBe('REJECTED_EXPIRED');
-    expect(auditArgs?.data.metadataJson.currentStatus).toBe(
+    expect(cancelArgs?.referenceId).toBe(reference.id);
+    expect(cancelArgs?.expectedVersion).toBe(reference.version);
+    expect(cancelArgs?.transitionCutoff).toBeInstanceOf(Date);
+    expect(cancelArgs?.actorId).toBe('supervisor-1');
+    expect(cancelArgs?.correlationId).toBeUndefined();
+    expect(auditArgs?.referenceId).toBe(reference.id);
+    expect(auditArgs?.result).toBe(AUDIT_RESULT.REJECTED_EXPIRED);
+    expect(auditArgs?.metadataJson?.currentStatus).toBe(
       ReferenceStatus.EXPIRED,
     );
-    expect(metricsService.recordReferenceCancel).toHaveBeenNthCalledWith(
+    expect(metrics.recordReferenceCancel).toHaveBeenNthCalledWith(
       1,
-      'rejected_expired',
+      REFERENCE_CANCEL_OUTCOME.REJECTED_EXPIRED,
     );
   });
 });

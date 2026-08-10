@@ -5,6 +5,12 @@ import {
   Registry,
   collectDefaultMetrics,
 } from 'prom-client';
+import type { AuthLoginOutcome } from '../../shared/vocabulary/auth-login-outcomes';
+import type { ProviderEventOutcome } from '../../shared/vocabulary/provider-event-outcomes';
+import type {
+  ReferenceCancelOutcome,
+  ReferenceCreateOutcome,
+} from '../../modules/references/domain/references.constants';
 
 @Injectable()
 export class MetricsService {
@@ -103,19 +109,19 @@ export class MetricsService {
     }
   }
 
-  recordLoginAttempt(outcome: 'success' | 'failure') {
+  recordLoginAttempt(outcome: AuthLoginOutcome) {
     this.authLogins.inc({ outcome });
   }
 
-  recordProviderEvent(eventType: string, outcome: string) {
+  recordProviderEvent(eventType: string, outcome: ProviderEventOutcome) {
     this.providerEvents.inc({ event_type: eventType, outcome });
   }
 
-  recordReferenceCreate(outcome: string) {
+  recordReferenceCreate(outcome: ReferenceCreateOutcome) {
     this.referenceCreates.inc({ outcome });
   }
 
-  recordReferenceCancel(outcome: string) {
+  recordReferenceCancel(outcome: ReferenceCancelOutcome) {
     this.referenceCancels.inc({ outcome });
   }
 

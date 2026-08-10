@@ -1,86 +1,48 @@
-import { createHash } from 'node:crypto';
 import { ReferenceStatus } from '@prisma/client';
+import {
+  type CancellationEligibilityInput,
+  type CancellationEligibilityResult,
+  evaluateCancellationEligibility as evaluateCancellationPolicy,
+} from './domain/policies/reference-cancellation.policy';
+import {
+  buildDeterministicReferenceId,
+  createIdempotencyFingerprint,
+  normalizeConcept,
+  normalizeCreateReferencePayload,
+  normalizeCurrency,
+  type CreateReferenceFingerprintPayload,
+} from './domain/policies/reference-idempotency.policy';
+import {
+  canAutoExpireReference as canAutoExpirePolicy,
+  evaluateExpirationEligibility as evaluateExpirationPolicy,
+  getEffectiveReferenceLifecycleStatus,
+  isReferenceOverdue,
+  type ExpirationEligibilityResult,
+} from './domain/policies/reference-expiration.policy';
+import { REFERENCES_IDEMPOTENCY_SCOPE } from './domain/references.constants';
 
-export interface CreateReferenceFingerprintPayload {
-  concept: string;
-  amount: number;
-  currency: string;
-  dueDate: string;
-}
-
-export interface CancellationEligibilityInput {
-  currentStatus: ReferenceStatus;
-  dueAt: Date;
-  currentVersion: number;
-  expectedVersion: number;
-  now?: Date;
-}
-
-export interface CancellationEligibilityResult {
-  allowed: boolean;
-  reason?: 'VERSION_MISMATCH' | 'INVALID_STATUS' | 'REFERENCE_EXPIRED';
-  effectiveStatus: ReferenceStatus;
-}
-
-export interface ExpirationEligibilityResult {
-  eligible: boolean;
-  reason?: 'INVALID_STATUS' | 'NOT_OVERDUE';
-}
-
-export const REFERENCES_IDEMPOTENCY_SCOPE = 'payment-reference:create';
-
-export function buildDeterministicReferenceId(
-  scope: string,
-  actorId: string,
-  idempotencyKey: string,
-) {
-  const suffix = createHash('sha256')
-    .update(`${scope}:${actorId}:${idempotencyKey}`)
-    .digest('hex')
-    .slice(0, 24);
-
-  return `ref_${suffix}`;
-}
-
-export function normalizeConcept(value: string) {
-  return value.trim().replace(/\s+/g, ' ');
-}
-
-export function normalizeCurrency(value: string) {
-  return value.trim().toUpperCase();
-}
-
-export function normalizeCreateReferencePayload(
-  payload: CreateReferenceFingerprintPayload,
-): CreateReferenceFingerprintPayload {
-  return {
-    concept: normalizeConcept(payload.concept),
-    amount: payload.amount,
-    currency: normalizeCurrency(payload.currency),
-    dueDate: new Date(payload.dueDate).toISOString(),
-  };
-}
-
-export function createIdempotencyFingerprint(
-  payload: CreateReferenceFingerprintPayload,
-) {
-  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
-}
+export {
+  buildDeterministicReferenceId,
+  createIdempotencyFingerprint,
+  isReferenceOverdue,
+  normalizeConcept,
+  normalizeCreateReferencePayload,
+  normalizeCurrency,
+  REFERENCES_IDEMPOTENCY_SCOPE,
+};
+export type {
+  CancellationEligibilityInput,
+  CancellationEligibilityResult,
+  CreateReferenceFingerprintPayload,
+  ExpirationEligibilityResult,
+};
 
 export function getEffectiveReferenceStatus(
   status: ReferenceStatus,
   dueAt: Date,
   now = new Date(),
-) {
-  if (canAutoExpireReference(status, dueAt, now)) {
-    return ReferenceStatus.EXPIRED;
-  }
-
-  return status;
-}
-
-export function isReferenceOverdue(dueAt: Date, now = new Date()) {
-  return dueAt.getTime() <= now.getTime();
+): ReferenceStatus {
+  return getEffectiveReferenceLifecycleStatus(status, dueAt, now);
 }
 
 export function canAutoExpireReference(
@@ -88,7 +50,7 @@ export function canAutoExpireReference(
   dueAt: Date,
   now = new Date(),
 ) {
-  return status === ReferenceStatus.PENDING && isReferenceOverdue(dueAt, now);
+  return canAutoExpirePolicy(status, dueAt, now);
 }
 
 export function evaluateExpirationEligibility(
@@ -96,58 +58,18 @@ export function evaluateExpirationEligibility(
   dueAt: Date,
   now = new Date(),
 ): ExpirationEligibilityResult {
-  if (status !== ReferenceStatus.PENDING) {
-    return {
-      eligible: false,
-      reason: 'INVALID_STATUS',
-    };
-  }
-
-  if (!isReferenceOverdue(dueAt, now)) {
-    return {
-      eligible: false,
-      reason: 'NOT_OVERDUE',
-    };
-  }
-
-  return { eligible: true };
+  return evaluateExpirationPolicy(status, dueAt, now);
 }
 
 export function evaluateCancellationEligibility(
   input: CancellationEligibilityInput,
 ): CancellationEligibilityResult {
-  const effectiveStatus = getEffectiveReferenceStatus(
-    input.currentStatus,
-    input.dueAt,
-    input.now,
-  );
-
-  if (input.expectedVersion !== input.currentVersion) {
-    return {
-      allowed: false,
-      reason: 'VERSION_MISMATCH',
-      effectiveStatus,
-    };
-  }
-
-  if (effectiveStatus === ReferenceStatus.EXPIRED) {
-    return {
-      allowed: false,
-      reason: 'REFERENCE_EXPIRED',
-      effectiveStatus,
-    };
-  }
-
-  if (effectiveStatus !== ReferenceStatus.PENDING) {
-    return {
-      allowed: false,
-      reason: 'INVALID_STATUS',
-      effectiveStatus,
-    };
-  }
-
   return {
-    allowed: true,
-    effectiveStatus,
+    ...evaluateCancellationPolicy(input),
+    effectiveStatus: getEffectiveReferenceStatus(
+      input.currentStatus,
+      input.dueAt,
+      input.now,
+    ),
   };
 }

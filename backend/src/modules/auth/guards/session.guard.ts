@@ -1,4 +1,5 @@
 import {
+  Inject,
   CanActivate,
   ExecutionContext,
   Injectable,
@@ -7,10 +8,17 @@ import {
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
 import type { Request, Response } from 'express';
-import { AuthService } from '../auth.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AppConfigService } from '../../../common/config/app-config.service';
-import { PrismaService } from '../../../common/prisma/prisma.service';
+import { ERROR_CODE } from '../../../shared/vocabulary/error-codes';
+import {
+  SESSION_COOKIE_PORT,
+  type SessionCookiePort,
+} from '../application/ports/session-cookie.port';
+import {
+  AUTH_SESSION_REPOSITORY,
+  type AuthSessionRepository,
+} from '../application/ports/session.repository';
 
 export interface SessionAuth {
   userId: string;
@@ -23,9 +31,11 @@ export interface SessionAuth {
 export class SessionGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly prisma: PrismaService,
+    @Inject(AUTH_SESSION_REPOSITORY)
+    private readonly repository: AuthSessionRepository,
     private readonly config: AppConfigService,
-    private readonly authService: AuthService,
+    @Inject(SESSION_COOKIE_PORT)
+    private readonly sessionCookie: SessionCookiePort,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -45,30 +55,27 @@ export class SessionGuard implements CanActivate {
 
     if (!sessionId) {
       throw new UnauthorizedException({
-        code: 'SESSION_REQUIRED',
+        code: ERROR_CODE.SESSION_REQUIRED,
         message: 'Authentication required',
       });
     }
 
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      include: { user: true },
-    });
+    const session = await this.repository.findSessionWithUser(sessionId);
 
     if (!session || !session.user.active) {
-      this.authService.clearSessionCookie(response);
+      this.sessionCookie.clearSessionCookie(response);
       throw new UnauthorizedException({
-        code: 'SESSION_REQUIRED',
+        code: ERROR_CODE.SESSION_REQUIRED,
         message: 'Authentication required',
       });
     }
 
     const now = new Date();
     if (session.expiresAt <= now || session.absoluteExpiresAt <= now) {
-      await this.prisma.session.deleteMany({ where: { id: session.id } });
-      this.authService.clearSessionCookie(response);
+      await this.repository.deleteSession(session.id);
+      this.sessionCookie.clearSessionCookie(response);
       throw new UnauthorizedException({
-        code: 'SESSION_EXPIRED',
+        code: ERROR_CODE.SESSION_EXPIRED,
         message: 'Session expired',
       });
     }
@@ -81,15 +88,9 @@ export class SessionGuard implements CanActivate {
         ? nextIdleExpiry
         : session.absoluteExpiresAt;
 
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: {
-        lastSeenAt: now,
-        expiresAt,
-      },
-    });
+    await this.repository.refreshSession(session.id, now, expiresAt);
 
-    this.authService.setSessionCookie(response, session.id, expiresAt);
+    this.sessionCookie.setSessionCookie(response, session.id, expiresAt);
 
     request.auth = {
       userId: session.user.id,

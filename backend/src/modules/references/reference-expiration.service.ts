@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnApplicationBootstrap,
@@ -8,7 +9,10 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { AppConfigService } from '../../common/config/app-config.service';
 import { MetricsService } from '../../common/metrics/metrics.service';
-import { ReferenceExpirationRepository } from './reference-expiration.repository';
+import {
+  REFERENCE_REPOSITORY,
+  type ReferenceRepository,
+} from './application/ports/reference.repository';
 
 export const REFERENCE_EXPIRATION_CRON_JOB = 'reference-expiration';
 
@@ -30,7 +34,8 @@ export class ReferenceExpirationService
   constructor(
     private readonly config: AppConfigService,
     private readonly schedulerRegistry: SchedulerRegistry,
-    private readonly repository: ReferenceExpirationRepository,
+    @Inject(REFERENCE_REPOSITORY)
+    private readonly repository: ReferenceRepository,
     private readonly metricsService: MetricsService,
   ) {}
 
@@ -78,7 +83,10 @@ export class ReferenceExpirationService
   async runTick(now = new Date()): Promise<ReferenceExpirationTickResult> {
     const batchSize = this.config.referenceExpiration.batchSize;
     const actorId = this.config.referenceExpiration.actorId;
-    const candidates = await this.repository.listOverduePending(batchSize, now);
+    const candidates = await this.repository.listOverduePendingReferences(
+      batchSize,
+      now,
+    );
 
     let expired = 0;
     let skipped = 0;
@@ -86,7 +94,7 @@ export class ReferenceExpirationService
     this.metricsService.recordReferenceExpirationAttempted(candidates.length);
 
     for (const candidate of candidates) {
-      const result = await this.repository.expireIfStillPending(
+      const result = await this.repository.expireReferenceIfStillPending(
         candidate,
         now,
         actorId,

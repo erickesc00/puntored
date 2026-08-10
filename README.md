@@ -75,6 +75,8 @@ cp .env.example .env
 docker compose up -d mysql
 npx prisma migrate deploy
 npx prisma db seed
+# Optional bulk reference dataset through the same seed entrypoint
+SEED_REFERENCE_COUNT=5000 npx prisma db seed
 npm run start:dev
 ```
 
@@ -217,6 +219,14 @@ npm run build
 | Unit | transition rules, cancellation eligibility, expiration logic, idempotency normalization |
 | Integration | Prisma/MySQL persistence, constraints/indexes, authorization, duplicates, cancel-vs-paid race handling |
 | E2E/runtime | highest-risk flow: login -> create -> safe retry -> list/detail -> valid cancel or conflict |
+
+### Backend module test ownership
+
+| Module | Unit ownership | Integration / seam ownership | E2E ownership |
+|---|---|---|---|
+| `auth` | `backend/src/modules/auth/application/use-cases/login.use-case.spec.ts` owns credential validation, login metrics, and cookie descriptor assembly without Nest or Prisma. | `backend/src/modules/auth/guards/session.guard.spec.ts` owns the guard's validation + refresh orchestration against the session repository and cookie adapter seam. | `backend/test/auth.e2e-spec.ts` owns the public login -> `/auth/me` refresh -> logout flow and cookie lifecycle. |
+| `references` | `backend/src/modules/references/domain/policies/*.spec.ts` and `reference-response.mapper.spec.ts` own pure business rules and serialization. | `backend/src/modules/references/infrastructure/persistence/prisma-reference.repository.spec.ts` and `reference-expiration.service.spec.ts` own Prisma-backed idempotency, compare-and-swap cancellation, and expiration scheduling seams. | `backend/test/references.e2e-spec.ts` owns create/idempotency/list/detail/cancel behavior visible through the API. |
+| `provider-events` | `backend/src/modules/provider-events/provider-events.service.spec.ts` owns duplicate/conflict/race orchestration at the provider-event processor seam. | The provider-event transaction seam is intentionally kept close to the processor because winning transitions must stay inside one Prisma transaction with `references`. | `backend/test/provider-events.e2e-spec.ts` owns callback success, duplicate replay, contradictory terminal-state conflict, and paid-vs-expiration race evidence. |
 
 Also covered explicitly:
 

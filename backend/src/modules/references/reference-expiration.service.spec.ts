@@ -15,10 +15,16 @@ describe('ReferenceExpirationService', () => {
   }) => {
     const schedulerRegistry = new SchedulerRegistry();
     const repository = {
-      listOverduePending: jest.fn().mockResolvedValue(overrides?.candidates ?? []),
-      expireIfStillPending: jest
+      listOverduePendingReferences: jest
         .fn()
-        .mockImplementation(async () => overrides?.expireResults?.shift() ?? { expired: false }),
+        .mockResolvedValue(overrides?.candidates ?? []),
+      expireReferenceIfStillPending: jest
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(
+            overrides?.expireResults?.shift() ?? { expired: false },
+          ),
+        ),
     };
     const metricsService = {
       recordReferenceExpirationAttempted: jest.fn(),
@@ -31,8 +37,7 @@ describe('ReferenceExpirationService', () => {
           enabled: overrides?.enabled ?? false,
           cron: overrides?.cron ?? '* * * * *',
           batchSize: overrides?.batchSize ?? 100,
-          actorId:
-            overrides?.actorId ?? 'system:test-reference-expirer',
+          actorId: overrides?.actorId ?? 'system:test-reference-expirer',
         },
       } as never,
       schedulerRegistry,
@@ -53,7 +58,7 @@ describe('ReferenceExpirationService', () => {
     ).toThrow();
   });
 
-  it('registers a cron job when expiration is enabled', () => {
+  it('registers a cron job when expiration is enabled', async () => {
     const { service, schedulerRegistry } = createService({
       enabled: true,
       cron: '*/5 * * * *',
@@ -66,7 +71,7 @@ describe('ReferenceExpirationService', () => {
     expect(job).toBeDefined();
     expect(job.isActive).toBe(true);
 
-    service.onModuleDestroy();
+    await service.onModuleDestroy();
   });
 
   it('supports deterministic manual ticks', async () => {
@@ -99,8 +104,11 @@ describe('ReferenceExpirationService', () => {
       evaluatedAt: '2026-08-08T18:00:00.000Z',
     });
 
-    expect(repository.listOverduePending).toHaveBeenCalledWith(25, now);
-    expect(repository.expireIfStillPending).toHaveBeenNthCalledWith(
+    expect(repository.listOverduePendingReferences).toHaveBeenCalledWith(
+      25,
+      now,
+    );
+    expect(repository.expireReferenceIfStillPending).toHaveBeenNthCalledWith(
       1,
       {
         id: 'ref-1',
@@ -110,7 +118,7 @@ describe('ReferenceExpirationService', () => {
       now,
       'system:reference-expirer',
     );
-    expect(repository.expireIfStillPending).toHaveBeenNthCalledWith(
+    expect(repository.expireReferenceIfStillPending).toHaveBeenNthCalledWith(
       2,
       {
         id: 'ref-2',
@@ -120,14 +128,14 @@ describe('ReferenceExpirationService', () => {
       now,
       'system:reference-expirer',
     );
-    expect(metricsService.recordReferenceExpirationAttempted).toHaveBeenCalledWith(
-      2,
-    );
-    expect(metricsService.recordReferenceExpirationExpired).toHaveBeenCalledWith(
-      1,
-    );
-    expect(metricsService.recordReferenceExpirationSkipped).toHaveBeenCalledWith(
-      1,
-    );
+    expect(
+      metricsService.recordReferenceExpirationAttempted,
+    ).toHaveBeenCalledWith(2);
+    expect(
+      metricsService.recordReferenceExpirationExpired,
+    ).toHaveBeenCalledWith(1);
+    expect(
+      metricsService.recordReferenceExpirationSkipped,
+    ).toHaveBeenCalledWith(1);
   });
 });
