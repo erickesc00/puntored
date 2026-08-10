@@ -230,6 +230,10 @@ describe('ReferenceDetailView', () => {
         screen.queryByRole('alertdialog', { name: 'Cancelar referencia de pago' }),
       ).not.toBeInTheDocument();
     });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Cancelar referencia' })).toHaveFocus();
+    });
   });
 
   it('refetches after a version conflict and retries with the latest version', async () => {
@@ -304,7 +308,7 @@ describe('ReferenceDetailView', () => {
 
     expect(
       await screen.findByText(
-        'La referencia cambió antes de completar la cancelación. Ya refrescamos el detalle con la última versión.',
+        'La referencia cambió mientras confirmabas la cancelación. Ya refrescamos el detalle con la última versión para que revises el estado actual antes de intentarlo de nuevo.',
       ),
     ).toBeInTheDocument();
 
@@ -377,7 +381,7 @@ describe('ReferenceDetailView', () => {
 
     expect(
       await screen.findByText(
-        'La referencia cambió antes de completar la cancelación. Ya refrescamos el detalle con la última versión.',
+        'La referencia cambió de estado antes de completar la cancelación. Ya refrescamos el detalle para que confirmes si todavía hace falta alguna acción.',
       ),
     ).toBeInTheDocument();
     expect(screen.getAllByText('Pagada').length).toBeGreaterThan(0);
