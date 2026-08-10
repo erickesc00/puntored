@@ -1,0 +1,550 @@
+openapi: 3.0.0
+paths:
+  /auth/login:
+    post:
+      description: Creates a session and sets it in the configured session cookie.
+      operationId: AuthController_login
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginDto"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponseDto"
+      summary: Log in
+      tags: &a1
+        - auth
+  /auth/logout:
+    post:
+      operationId: AuthController_logout
+      parameters: []
+      responses:
+        "204":
+          description: Session ended and cookie cleared.
+      security:
+        - sessionCookie: []
+      summary: Log out
+      tags: *a1
+  /auth/me:
+    get:
+      operationId: AuthController_getCurrentSession
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponseDto"
+      security:
+        - sessionCookie: []
+      summary: Get the current session
+      tags: *a1
+  /health:
+    get:
+      operationId: HealthController_getHealth
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponseDto"
+        "503":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponseDto"
+      summary: Get service health
+      tags:
+        - health
+  /provider/events:
+    post:
+      operationId: ProviderEventsController_ingestProviderEvent
+      parameters:
+        - name: x-provider-secret
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderCallbackDto"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderEventResponseDto"
+      security:
+        - providerApiKey: []
+      summary: Ingest a provider event
+      tags:
+        - provider-events
+  /references:
+    post:
+      operationId: ReferencesController_createReference
+      parameters:
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReferenceDto"
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferenceResponseDto"
+      security: &a2
+        - sessionCookie: []
+      summary: Create a payment reference
+      tags: &a3
+        - references
+    get:
+      operationId: ReferencesController_listReferences
+      parameters:
+        - name: status
+          required: false
+          in: query
+          schema:
+            type: string
+            enum:
+              - PENDING
+              - PAID
+              - CANCELLED
+              - EXPIRED
+        - name: createdFrom
+          required: false
+          in: query
+          schema:
+            format: date-time
+            type: string
+        - name: createdTo
+          required: false
+          in: query
+          schema:
+            format: date-time
+            type: string
+        - name: search
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: cursor
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: limit
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            maximum: 100
+            type: number
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListReferencesResponseDto"
+      security: *a2
+      summary: List payment references
+      tags: *a3
+  /references/{id}:
+    get:
+      operationId: ReferencesController_getReferenceDetail
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferenceDetailResponseDto"
+      security: *a2
+      summary: Get a payment reference detail
+      tags: *a3
+  /references/{id}/cancel:
+    post:
+      operationId: ReferencesController_cancelReference
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelReferenceDto"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferenceResponseDto"
+      security: *a2
+      summary: Cancel a payment reference
+      tags: *a3
+info:
+  title: Puntored Backend API
+  description: HTTP API for authentication, references, health, and provider events.
+  version: 0.1.0
+  contact: {}
+tags: []
+servers:
+  - url: /api
+    description: Configured API prefix
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: puntored.sid
+    providerApiKey:
+      type: apiKey
+      in: header
+      name: x-provider-secret
+  schemas:
+    LoginDto:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 100
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          format: password
+      required:
+        - username
+        - password
+    LoginUserResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum:
+            - OPERATOR
+            - SUPERVISOR
+      required:
+        - id
+        - username
+        - role
+    LoginSessionResponseDto:
+      type: object
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+        absoluteExpiresAt:
+          type: string
+          format: date-time
+      required:
+        - expiresAt
+        - absoluteExpiresAt
+    LoginResponseDto:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/LoginUserResponseDto"
+        session:
+          $ref: "#/components/schemas/LoginSessionResponseDto"
+      required:
+        - user
+        - session
+    SessionResponseUserDto:
+      type: object
+      properties:
+        userId:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum:
+            - OPERATOR
+            - SUPERVISOR
+        sessionId:
+          type: string
+      required:
+        - userId
+        - username
+        - role
+        - sessionId
+    SessionResponseDto:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/SessionResponseUserDto"
+      required:
+        - user
+    HealthChecksResponseDto:
+      type: object
+      properties:
+        database:
+          type: string
+          enum:
+            - up
+            - down
+      required:
+        - database
+    HealthResponseDto:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - degraded
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          $ref: "#/components/schemas/HealthChecksResponseDto"
+      required:
+        - status
+        - version
+        - timestamp
+        - checks
+    ProviderCallbackDto:
+      type: object
+      properties:
+        providerEventId:
+          type: string
+          maxLength: 191
+        referenceId:
+          type: string
+          maxLength: 191
+        externalReference:
+          type: string
+          maxLength: 30
+        status:
+          type: string
+          enum:
+            - PAID
+            - CANCELLED
+        paidAt:
+          type: string
+          format: date-time
+        occurredAt:
+          type: string
+          format: date-time
+      required:
+        - providerEventId
+        - referenceId
+        - externalReference
+        - status
+    ReferenceCreatorResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum:
+            - OPERATOR
+            - SUPERVISOR
+      required:
+        - id
+    ReferenceResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+        externalReference:
+          type: string
+          nullable: true
+        concept:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - PENDING
+            - PAID
+            - CANCELLED
+            - EXPIRED
+        version:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: "#/components/schemas/ReferenceCreatorResponseDto"
+      required:
+        - id
+        - externalReference
+        - concept
+        - amount
+        - currency
+        - dueDate
+        - status
+        - version
+        - createdAt
+        - updatedAt
+        - createdBy
+    ProviderEventResponseDto:
+      type: object
+      properties:
+        providerEventId:
+          type: string
+        outcome:
+          type: string
+        duplicate:
+          type: boolean
+        reference:
+          $ref: "#/components/schemas/ReferenceResponseDto"
+      required:
+        - providerEventId
+        - outcome
+        - duplicate
+        - reference
+    CreateReferenceDto:
+      type: object
+      properties:
+        concept:
+          type: string
+          maxLength: 255
+        amount:
+          type: number
+          minimum: 1
+        currency:
+          type: string
+          pattern: ^[A-Za-z]{3}$
+          example: COP
+        dueDate:
+          type: string
+          format: date-time
+      required:
+        - concept
+        - amount
+        - currency
+        - dueDate
+    ReferencePageInfoDto:
+      type: object
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+      required:
+        - nextCursor
+    ListReferencesResponseDto:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReferenceResponseDto"
+        pageInfo:
+          $ref: "#/components/schemas/ReferencePageInfoDto"
+      required:
+        - items
+        - pageInfo
+    ReferenceHistoryResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+        actorType:
+          type: string
+          enum:
+            - USER
+            - SYSTEM
+            - PROVIDER
+        actorId:
+          type: string
+          nullable: true
+        action:
+          type: string
+        result:
+          type: string
+        correlationId:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - actorType
+        - actorId
+        - action
+        - result
+        - correlationId
+        - metadata
+        - createdAt
+    ReferenceDetailResponseDto:
+      type: object
+      properties:
+        reference:
+          $ref: "#/components/schemas/ReferenceResponseDto"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReferenceHistoryResponseDto"
+      required:
+        - reference
+        - history
+    CancelReferenceDto:
+      type: object
+      properties:
+        version:
+          type: number
+          minimum: 1
+      required:
+        - version

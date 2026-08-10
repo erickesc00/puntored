@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { AppConfigService } from './common/config/app-config.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { setupOpenApi } from './common/openapi/openapi-config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -37,6 +38,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
   app.setGlobalPrefix(config.http.globalPrefix);
+  setupOpenApi(app, config);
 
   await app.listen(config.http.port);
 }
