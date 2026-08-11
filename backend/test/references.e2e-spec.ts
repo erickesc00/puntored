@@ -135,6 +135,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
 
   const providerSecret =
     process.env.PROVIDER_SHARED_SECRET ?? 'test-provider-secret-1234';
+  const providerActorId = process.env.PROVIDER_ACTOR_ID ?? 'provider:test';
 
   it('creates provider-originated references without changing the internal create path', async () => {
     const response = await request(getHttpServer())
@@ -146,7 +147,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     expect(response.body).toMatchObject({
       externalReference: 'PROVIDER-CREATE-001',
       creatorActorType: ReferenceCreatorActorType.PROVIDER,
-      creatorActorId: 'provider:puntored',
+      creatorActorId: providerActorId,
       status: ReferenceStatus.PENDING,
     });
 
@@ -157,7 +158,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     expect(persistedReference.creatorActorType).toBe(
       ReferenceCreatorActorType.PROVIDER,
     );
-    expect(persistedReference.creatorActorId).toBe('provider:puntored');
+    expect(persistedReference.creatorActorId).toBe(providerActorId);
     expect(persistedReference.createdBy).toBeNull();
   });
 

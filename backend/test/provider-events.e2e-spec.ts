@@ -97,7 +97,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
         status: ReferenceStatus.PENDING,
         version: 1,
         creatorActorType: ReferenceCreatorActorType.PROVIDER,
-        creatorActorId: 'provider:puntored',
+        creatorActorId: providerActorId,
         createdBy: null,
         externalReference: `EXT-${randomUUID().slice(0, 8).toUpperCase()}`,
       },
@@ -118,6 +118,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
 
   const providerSecret =
     process.env.PROVIDER_SHARED_SECRET ?? 'test-provider-secret-1234';
+  const providerActorId = process.env.PROVIDER_ACTOR_ID ?? 'provider:test';
 
   it('rejects provider callbacks without the shared secret', async () => {
     const reference = await createPersistedReference();
@@ -142,7 +143,7 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       .send(payload)
       .expect(200);
 
-    expect(response.body.reference.createdBy.id).toBe('provider:puntored');
+    expect(response.body.reference.createdBy.id).toBe(providerActorId);
     const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
       where: { id: reference.id },
     });
