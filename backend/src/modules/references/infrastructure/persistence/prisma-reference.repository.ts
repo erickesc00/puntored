@@ -217,7 +217,9 @@ export class PrismaReferenceRepository implements ReferenceRepository {
     });
   }
 
-  persistProviderCreatedReference(input: CreateProviderReferencePersistenceInput) {
+  persistProviderCreatedReference(
+    input: CreateProviderReferencePersistenceInput,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const reference = await tx.paymentReference.create({
         data: {

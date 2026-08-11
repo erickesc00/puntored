@@ -38,7 +38,11 @@ export function normalizeCreateReferencePayload(
 ): CreateReferenceFingerprintPayload {
   return {
     ...(payload.externalReference
-      ? { externalReference: normalizeExternalReference(payload.externalReference) }
+      ? {
+          externalReference: normalizeExternalReference(
+            payload.externalReference,
+          ),
+        }
       : {}),
     concept: normalizeConcept(payload.concept),
     amount: payload.amount,

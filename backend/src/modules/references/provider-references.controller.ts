@@ -1,4 +1,12 @@
-import { Body, Controller, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import {
   ApiCreatedResponse,
@@ -22,7 +30,9 @@ export class ProviderReferencesController {
 
   @Post()
   @HttpCode(201)
-  @ApiOperation({ summary: 'Create a provider-originated payment reference' })
+  @ApiOperation({
+    summary: 'Create a provider-originated payment reference',
+  })
   @ApiHeader({ name: 'x-provider-secret', required: true })
   @ApiCreatedResponse({ type: ProviderReferenceResponseDto })
   @ApiOkResponse({ type: ProviderReferenceResponseDto })

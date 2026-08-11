@@ -238,13 +238,13 @@ export class CreateReferenceUseCase {
       );
     }
 
-      await this.repository.appendAuditEvent({
-        referenceId: reference.id,
-        actorType: AuditActorType.USER,
-        actorId: reference.createdBy ?? reference.creatorActorId,
-        action: REFERENCE_AUDIT_ACTION.IDEMPOTENT_REPLAY,
-        result: AUDIT_RESULT.SUCCESS,
-        correlationId,
+    await this.repository.appendAuditEvent({
+      referenceId: reference.id,
+      actorType: AuditActorType.USER,
+      actorId: reference.createdBy ?? reference.creatorActorId,
+      action: REFERENCE_AUDIT_ACTION.IDEMPOTENT_REPLAY,
+      result: AUDIT_RESULT.SUCCESS,
+      correlationId,
     });
 
     this.metrics.recordReferenceCreate(REFERENCE_CREATE_OUTCOME.SUCCESS);

@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { AuditActorType, Prisma, ReferenceCreatorActorType } from '@prisma/client';
+import { AuditActorType, Prisma } from '@prisma/client';
 import { AppConfigService } from '../../../../common/config/app-config.service';
 import { ApplicationHttpError } from '../../../../common/errors/application-http.error';
 import { AUDIT_RESULT } from '../../../../shared/vocabulary/audit-results';
@@ -99,7 +99,11 @@ export class CreateProviderReferenceUseCase {
         );
 
         if (replayed) {
-          return this.resolveExisting(replayed, normalizedRequest, correlationId);
+          return this.resolveExisting(
+            replayed,
+            normalizedRequest,
+            correlationId,
+          );
         }
       }
 

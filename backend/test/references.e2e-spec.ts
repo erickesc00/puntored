@@ -192,7 +192,9 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
       .post('/api/provider/references')
       .set('x-provider-secret', providerSecret)
       .send(
-        buildProviderCreatePayload({ externalReference: 'provider-conflict-001' }),
+        buildProviderCreatePayload({
+          externalReference: 'provider-conflict-001',
+        }),
       )
       .expect(201);
 
@@ -207,9 +209,7 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
       )
       .expect(409);
 
-    expect(response.body.code).toBe(
-      'PROVIDER_EXTERNAL_REFERENCE_CONFLICT',
-    );
+    expect(response.body.code).toBe('PROVIDER_EXTERNAL_REFERENCE_CONFLICT');
     expect(await prisma.paymentReference.count()).toBe(1);
   });
 
