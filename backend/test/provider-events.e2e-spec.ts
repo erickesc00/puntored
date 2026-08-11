@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 import { INestApplication } from '@nestjs/common';
-import { ReferenceStatus } from '@prisma/client';
+import { ReferenceCreatorActorType, ReferenceStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { PrismaService } from '../src/common/prisma/prisma.service';
@@ -76,11 +76,30 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
         dueAt: overrides?.dueAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
         status: overrides?.status ?? ReferenceStatus.PENDING,
         version: overrides?.version ?? 1,
+        creatorActorType: ReferenceCreatorActorType.USER,
+        creatorActorId: operatorUser.id,
         createdBy: operatorUser.id,
         externalReference:
           overrides?.externalReference === undefined
             ? `EXT-${randomUUID().slice(0, 8).toUpperCase()}`
             : overrides.externalReference,
+      },
+    });
+  };
+
+  const createProviderOwnedReference = async () => {
+    return prisma.paymentReference.create({
+      data: {
+        concept: 'Provider-owned fixture reference',
+        amount: BigInt(64000),
+        currency: 'MXN',
+        dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        status: ReferenceStatus.PENDING,
+        version: 1,
+        creatorActorType: ReferenceCreatorActorType.PROVIDER,
+        creatorActorId: 'provider:puntored',
+        createdBy: null,
+        externalReference: `EXT-${randomUUID().slice(0, 8).toUpperCase()}`,
       },
     });
   };
@@ -109,6 +128,25 @@ describe('Provider event endpoints (e2e, real Prisma + MySQL)', () => {
       .expect(401);
 
     expect(response.body.code).toBe(ERROR_CODE.PROVIDER_UNAUTHORIZED);
+  });
+
+  it('keeps callbacks working for provider-created references that have no human creator', async () => {
+    const reference = await createProviderOwnedReference();
+    const payload = providerPayload(reference.id, {
+      externalReference: reference.externalReference,
+    });
+
+    const response = await request(getHttpServer())
+      .post('/api/provider/events')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(200);
+
+    expect(response.body.reference.createdBy.id).toBe('provider:puntored');
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    expect(persistedReference.status).toBe(ReferenceStatus.PAID);
   });
 
   it('marks a pending reference as paid, persists provider idempotency evidence, and exposes provider metrics', async () => {

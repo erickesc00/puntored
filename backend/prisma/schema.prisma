@@ -25,6 +25,11 @@ enum AuditActorType {
   PROVIDER
 }
 
+enum ReferenceCreatorActorType {
+  USER
+  PROVIDER
+}
+
 model User {
   id           String             @id @default(cuid()) @db.VarChar(191)
   username     String             @unique(map: "uq_users_username") @db.VarChar(100)
@@ -58,18 +63,20 @@ model Session {
 }
 
 model PaymentReference {
-  id                String           @id @default(cuid()) @db.VarChar(191)
-  externalReference String?          @unique(map: "uq_payment_references_external_reference") @map("external_reference") @db.VarChar(30)
-  concept           String           @db.VarChar(255)
+  id                String                    @id @default(cuid()) @db.VarChar(191)
+  externalReference String?                   @unique(map: "uq_payment_references_external_reference") @map("external_reference") @db.VarChar(30)
+  concept           String                    @db.VarChar(255)
   amount            BigInt
-  currency          String           @db.Char(3)
-  dueAt             DateTime         @map("due_at")
-  status            ReferenceStatus  @default(PENDING)
-  version           Int              @default(1)
-  createdBy         String           @map("created_by") @db.VarChar(191)
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
-  creator           User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  currency          String                    @db.Char(3)
+  dueAt             DateTime                  @map("due_at")
+  status            ReferenceStatus           @default(PENDING)
+  version           Int                       @default(1)
+  creatorActorType  ReferenceCreatorActorType @map("creator_actor_type")
+  creatorActorId    String                    @map("creator_actor_id") @db.VarChar(191)
+  createdBy         String?                   @map("created_by") @db.VarChar(191)
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+  creator           User?                     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   auditEvents       AuditEvent[]
   idempotencyKeys   IdempotencyKey[]
   providerEvents    ProviderEvent[]

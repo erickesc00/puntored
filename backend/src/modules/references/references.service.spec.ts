@@ -1,4 +1,4 @@
-import { ReferenceStatus } from '@prisma/client';
+import { ReferenceCreatorActorType, ReferenceStatus } from '@prisma/client';
 import { ApplicationHttpError } from '../../common/errors/application-http.error';
 import { AUDIT_RESULT } from '../../shared/vocabulary/audit-results';
 import { ERROR_CODE } from '../../shared/vocabulary/error-codes';
@@ -64,6 +64,8 @@ describe('CancelReferenceUseCase', () => {
       dueAt: new Date('2026-08-09T12:00:01.000Z'),
       status: ReferenceStatus.PENDING,
       version: 7,
+      creatorActorType: ReferenceCreatorActorType.USER,
+      creatorActorId: 'user-1',
       createdBy: 'user-1',
       createdAt: justBeforeExpiry,
       updatedAt: justBeforeExpiry,

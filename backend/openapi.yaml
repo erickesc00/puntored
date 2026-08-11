@@ -217,6 +217,39 @@ paths:
       security: *a2
       summary: Cancel a payment reference
       tags: *a3
+  /provider/references:
+    post:
+      operationId: ProviderReferencesController_createProviderReference
+      parameters:
+        - name: x-provider-secret
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderCreateReferenceDto"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderReferenceResponseDto"
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderReferenceResponseDto"
+      security:
+        - providerApiKey: []
+      summary: Create a provider-originated payment reference
+      tags:
+        - provider-references
 info:
   title: Puntored Backend API
   description: HTTP API for authentication, references, health, and provider events.
@@ -555,3 +588,79 @@ components:
           minimum: 1
       required:
         - version
+    ProviderCreateReferenceDto:
+      type: object
+      properties:
+        concept:
+          type: string
+          maxLength: 255
+        amount:
+          type: number
+          minimum: 1
+        currency:
+          example: MXN
+          allOf:
+            - $ref: "#/components/schemas/SupportedCurrency"
+        dueDate:
+          type: string
+          format: date-time
+        externalReference:
+          type: string
+          maxLength: 30
+      required:
+        - concept
+        - amount
+        - currency
+        - dueDate
+        - externalReference
+    ProviderReferenceResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+        externalReference:
+          type: string
+        concept:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - PENDING
+            - PAID
+            - CANCELLED
+            - EXPIRED
+        version:
+          type: number
+        creatorActorType:
+          type: string
+          enum:
+            - USER
+            - PROVIDER
+        creatorActorId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - externalReference
+        - concept
+        - amount
+        - currency
+        - dueDate
+        - status
+        - version
+        - creatorActorType
+        - creatorActorId
+        - createdAt
+        - updatedAt

@@ -18,6 +18,7 @@ export const REFERENCE_CREATE_OUTCOME = {
   REJECTED_INVALID_DUE_DATE: 'rejected_invalid_due_date',
   REJECTED_PROVIDER_ALLOCATION_FAILED: 'rejected_provider_allocation_failed',
   REJECTED_IDEMPOTENCY_CONFLICT: 'rejected_idempotency_conflict',
+  REJECTED_EXTERNAL_REFERENCE_CONFLICT: 'rejected_external_reference_conflict',
   REJECTED_UNRESOLVABLE_REPLAY: 'rejected_unresolvable_replay',
 } as const;
 

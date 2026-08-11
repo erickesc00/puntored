@@ -145,6 +145,8 @@ async function upsertDemoReference(
       dueAt: new Date(fixture.dueAt),
       status: fixture.status,
       version: fixture.history.length,
+      creatorActorType: 'USER',
+      creatorActorId: users.operator.id,
       createdBy: users.operator.id,
     },
     create: {
@@ -155,6 +157,8 @@ async function upsertDemoReference(
       dueAt: new Date(fixture.dueAt),
       status: fixture.status,
       version: fixture.history.length,
+      creatorActorType: 'USER',
+      creatorActorId: users.operator.id,
       createdBy: users.operator.id,
     },
   });

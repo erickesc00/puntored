@@ -1,5 +1,5 @@
 import { ConflictException } from '@nestjs/common';
-import { ReferenceStatus } from '@prisma/client';
+import { ReferenceCreatorActorType, ReferenceStatus } from '@prisma/client';
 import { AUDIT_RESULT } from '../../shared/vocabulary/audit-results';
 import { ERROR_CODE } from '../../shared/vocabulary/error-codes';
 import { PROVIDER_EVENT_OUTCOME } from '../../shared/vocabulary/provider-event-outcomes';
@@ -37,7 +37,9 @@ describe('PrismaProviderEventProcessor', () => {
     dueAt: Date;
     status: ReferenceStatus;
     version: number;
-    createdBy: string;
+    creatorActorType: ReferenceCreatorActorType;
+    creatorActorId: string;
+    createdBy: string | null;
     createdAt: Date;
     updatedAt: Date;
   };
@@ -223,6 +225,8 @@ describe('PrismaProviderEventProcessor', () => {
       dueAt: new Date('2026-08-09T12:00:01.000Z'),
       status: ReferenceStatus.PENDING,
       version: 4,
+      creatorActorType: ReferenceCreatorActorType.USER,
+      creatorActorId: 'user-1',
       createdBy: 'user-1',
       createdAt: justBeforeExpiry,
       updatedAt: justBeforeExpiry,

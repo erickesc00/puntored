@@ -1,4 +1,9 @@
-import type { AuditActorType, ReferenceStatus, UserRole } from '@prisma/client';
+import type {
+  AuditActorType,
+  ReferenceCreatorActorType,
+  ReferenceStatus,
+  UserRole,
+} from '@prisma/client';
 import type { AuditAction } from '../../../../shared/vocabulary/audit-actions';
 import type { AuditResult } from '../../../../shared/vocabulary/audit-results';
 
@@ -13,14 +18,16 @@ export interface ReferenceRecord {
   dueAt: Date;
   status: ReferenceStatus;
   version: number;
-  createdBy: string;
+  creatorActorType: ReferenceCreatorActorType;
+  creatorActorId: string;
+  createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
   creator?: {
     id: string;
     username: string;
     role: UserRole;
-  };
+  } | null;
 }
 
 export interface StoredIdempotencyRecord {
@@ -103,6 +110,16 @@ export interface CancelPendingReferenceInput {
   correlationId?: string;
 }
 
+export interface CreateProviderReferencePersistenceInput {
+  actorId: string;
+  externalReference: string;
+  concept: string;
+  amount: number;
+  currency: string;
+  dueAt: Date;
+  correlationId?: string;
+}
+
 export interface ReferenceRepository {
   findIdempotencyRecord(
     scope: string,
@@ -110,6 +127,9 @@ export interface ReferenceRepository {
     idempotencyKey: string,
   ): Promise<StoredIdempotencyRecord | null>;
   findReferenceById(id: string): Promise<ReferenceRecord | null>;
+  findReferenceByExternalReference(
+    externalReference: string,
+  ): Promise<ReferenceRecord | null>;
   findReferenceStatusSnapshot(
     id: string,
   ): Promise<ReferenceStatusSnapshot | null>;
@@ -120,6 +140,9 @@ export interface ReferenceRepository {
   appendAuditEvent(entry: AppendReferenceAuditEntry): Promise<void>;
   persistCreatedReference(
     input: CreateReferencePersistenceInput,
+  ): Promise<ReferenceRecord>;
+  persistProviderCreatedReference(
+    input: CreateProviderReferencePersistenceInput,
   ): Promise<ReferenceRecord>;
   cancelPendingReference(
     input: CancelPendingReferenceInput,

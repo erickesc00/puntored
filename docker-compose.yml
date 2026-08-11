@@ -115,6 +115,7 @@ services:
       HOST: 0.0.0.0
       STUB_DB_PATH: /data/stub.db
       STUB_API_KEY: change-this-stub-api-key
+      BACKEND_CREATE_URL: http://backend:3000/api/provider/references
       BACKEND_CALLBACK_URL: http://backend:3000/api/provider/events
       PROVIDER_SHARED_SECRET: change-this-provider-secret
     ports:

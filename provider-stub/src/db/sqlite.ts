@@ -28,6 +28,15 @@ export interface CreateProviderReferenceInput {
   dueDate: string;
 }
 
+export interface StoreProviderCreatedReferenceInput {
+  backendReferenceId: string;
+  externalReference: string;
+  concept: string;
+  amount: number;
+  currency: string;
+  dueDate: string;
+}
+
 export interface ListProviderReferencesInput {
   status?: ProviderReferenceStatus;
   backendReferenceId?: string;
@@ -62,6 +71,73 @@ export class ProviderReferenceRepository {
       CREATE INDEX IF NOT EXISTS idx_external_references_status
         ON external_references (status, created_at DESC);
     `);
+  }
+
+  storeProviderCreated(
+    input: StoreProviderCreatedReferenceInput,
+  ): ProviderReferenceRecord {
+    const byBackendReferenceId = this.findByBackendReferenceId(
+      input.backendReferenceId,
+    );
+
+    if (byBackendReferenceId) {
+      if (
+        byBackendReferenceId.externalReference !== input.externalReference ||
+        byBackendReferenceId.concept !== input.concept ||
+        byBackendReferenceId.amount !== input.amount ||
+        byBackendReferenceId.currency !== input.currency ||
+        byBackendReferenceId.dueDate !== input.dueDate
+      ) {
+        throw new Error(
+          'Stored provider mapping conflicts with the backend response',
+        );
+      }
+
+      return byBackendReferenceId;
+    }
+
+    const now = new Date().toISOString();
+    const record: ProviderReferenceRecord = {
+      backendReferenceId: input.backendReferenceId,
+      externalReference: input.externalReference,
+      concept: input.concept,
+      amount: input.amount,
+      currency: input.currency,
+      dueDate: input.dueDate,
+      status: 'PENDING',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.database
+      .prepare(
+        `
+        INSERT INTO external_references (
+          backend_reference_id,
+          external_reference,
+          concept,
+          amount,
+          currency,
+          due_date,
+          status,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      )
+      .run(
+        record.backendReferenceId,
+        record.externalReference,
+        record.concept,
+        record.amount,
+        record.currency,
+        record.dueDate,
+        record.status,
+        record.createdAt,
+        record.updatedAt,
+      );
+
+    return record;
   }
 
   createOrGet(input: CreateProviderReferenceInput): ProviderReferenceRecord {

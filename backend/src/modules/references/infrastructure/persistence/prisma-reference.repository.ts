@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { AuditActorType, Prisma, ReferenceStatus } from '@prisma/client';
+import {
+  AuditActorType,
+  Prisma,
+  ReferenceCreatorActorType,
+  ReferenceStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../../../common/prisma/prisma.service';
 import { AUDIT_ACTION } from '../../../../shared/vocabulary/audit-actions';
 import { AUDIT_RESULT } from '../../../../shared/vocabulary/audit-results';
@@ -11,6 +16,7 @@ import {
   type AppendReferenceAuditEntry,
   type CancelPendingReferenceInput,
   type CreateReferencePersistenceInput,
+  type CreateProviderReferencePersistenceInput,
   type ExpirationCandidate,
   type ExpireResult,
   type ListReferencesQuery,
@@ -47,6 +53,23 @@ export class PrismaReferenceRepository implements ReferenceRepository {
   findReferenceById(id: string): Promise<ReferenceRecord | null> {
     return this.prisma.paymentReference.findUnique({
       where: { id },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            username: true,
+            role: true,
+          },
+        },
+      },
+    });
+  }
+
+  findReferenceByExternalReference(
+    externalReference: string,
+  ): Promise<ReferenceRecord | null> {
+    return this.prisma.paymentReference.findUnique({
+      where: { externalReference },
       include: {
         creator: {
           select: {
@@ -142,6 +165,8 @@ export class PrismaReferenceRepository implements ReferenceRepository {
           amount: BigInt(input.amount),
           currency: input.currency,
           dueAt: input.dueAt,
+          creatorActorType: ReferenceCreatorActorType.USER,
+          creatorActorId: input.actorId,
           createdBy: input.actorId,
           ...(input.externalReference
             ? { externalReference: input.externalReference }
@@ -185,6 +210,49 @@ export class PrismaReferenceRepository implements ReferenceRepository {
             Date.now() +
               REFERENCE_CREATE_IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000,
           ),
+        },
+      });
+
+      return reference;
+    });
+  }
+
+  persistProviderCreatedReference(input: CreateProviderReferencePersistenceInput) {
+    return this.prisma.$transaction(async (tx) => {
+      const reference = await tx.paymentReference.create({
+        data: {
+          externalReference: input.externalReference,
+          concept: input.concept,
+          amount: BigInt(input.amount),
+          currency: input.currency,
+          dueAt: input.dueAt,
+          creatorActorType: ReferenceCreatorActorType.PROVIDER,
+          creatorActorId: input.actorId,
+          createdBy: null,
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              username: true,
+              role: true,
+            },
+          },
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          referenceId: reference.id,
+          actorType: AuditActorType.PROVIDER,
+          actorId: input.actorId,
+          action: REFERENCE_AUDIT_ACTION.CREATE,
+          result: AUDIT_RESULT.SUCCESS,
+          correlationId: input.correlationId,
+          metadataJson: {
+            currency: input.currency,
+            externalReference: input.externalReference,
+          },
         },
       });
 

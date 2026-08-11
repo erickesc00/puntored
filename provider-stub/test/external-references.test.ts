@@ -23,6 +23,7 @@ test('creates one provider reference per backend reference id', async (t) => {
       host: '127.0.0.1',
       databasePath: temp.dbPath,
       apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
       backendCallbackUrl: 'http://localhost:3000/api/provider/events',
       providerSharedSecret: 'provider-secret',
     },
@@ -79,6 +80,7 @@ test('filters the stored provider list by status and backend reference id', asyn
       host: '127.0.0.1',
       databasePath: temp.dbPath,
       apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
       backendCallbackUrl: 'http://localhost:3000/api/provider/events',
       providerSharedSecret: 'provider-secret',
     },
@@ -153,6 +155,7 @@ test('guards callback triggers with x-stub-api-key and forwards provider auth to
       host: '127.0.0.1',
       databasePath: temp.dbPath,
       apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
       backendCallbackUrl: 'http://localhost:3000/api/provider/events',
       providerSharedSecret: 'provider-secret',
     },
@@ -217,6 +220,7 @@ test('serves a minimal operator UI and lets it trigger callbacks without the stu
       host: '127.0.0.1',
       databasePath: temp.dbPath,
       apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
       backendCallbackUrl: 'http://localhost:3000/api/provider/events',
       providerSharedSecret: 'provider-secret',
     },
@@ -259,6 +263,10 @@ test('serves a minimal operator UI and lets it trigger callbacks without the stu
   assert.match(htmlResponse.headers['content-type'] ?? '', /text\/html/);
   assert.match(htmlResponse.body, /Provider Stub Operator/);
   assert.match(htmlResponse.body, /Last callback result/);
+  assert.match(htmlResponse.body, /Generate random reference/);
+  assert.match(htmlResponse.body, /<select id="create-currency">/);
+  assert.match(htmlResponse.body, /<option value="COP">COP<\/option>/);
+  assert.match(htmlResponse.body, /<option value="EUR">EUR<\/option>/);
 
   assert.equal(listResponse.statusCode, 200);
   assert.equal(listResponse.json().items.length, 1);
@@ -282,6 +290,7 @@ test('keeps the stored status unchanged when the backend rejects an operator cal
       host: '127.0.0.1',
       databasePath: temp.dbPath,
       apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
       backendCallbackUrl: 'http://localhost:3000/api/provider/events',
       providerSharedSecret: 'provider-secret',
     },
@@ -327,4 +336,187 @@ test('keeps the stored status unchanged when the backend rejects an operator cal
   assert.equal(listResponse.json().items.length, 1);
   assert.equal(listResponse.json().items[0].backendReferenceId, 'ref-ui-reject-1');
   assert.equal(listResponse.json().items[0].status, 'PENDING');
+});
+
+test('creates provider-originated references through the operator route and stores the backend mapping for callbacks', async (t) => {
+  const temp = createTempDbPath();
+  t.after(() => rmSync(temp.dir, { recursive: true, force: true }));
+
+  const fetchCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
+  const app = await buildProviderStubApp({
+    env: {
+      port: 3002,
+      host: '127.0.0.1',
+      databasePath: temp.dbPath,
+      apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
+      backendCallbackUrl: 'http://localhost:3000/api/provider/events',
+      providerSharedSecret: 'provider-secret',
+    },
+    fetchImpl: async (url, init) => {
+      fetchCalls.push({ url: String(url), init });
+
+      if (String(url).includes('/provider/references')) {
+        return new Response(
+          JSON.stringify({
+            id: 'backend-provider-1',
+            externalReference: 'PROVIDER-OP-001',
+            concept: 'Operator create flow',
+            amount: 1500,
+            currency: 'MXN',
+            dueDate: '2026-08-20T10:00:00.000Z',
+            status: 'PENDING',
+            version: 1,
+            creatorActorType: 'PROVIDER',
+            creatorActorId: 'provider:puntored',
+            createdAt: '2026-08-01T10:00:00.000Z',
+            updatedAt: '2026-08-01T10:00:00.000Z',
+          }),
+          {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }
+
+      return new Response(JSON.stringify({ outcome: 'SUCCESS' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+  t.after(async () => app.close());
+
+  const createResponse = await app.inject({
+    method: 'POST',
+    url: '/operator/references',
+    payload: {
+      externalReference: 'provider-op-001',
+      concept: 'Operator create flow',
+      amount: '15.00',
+      currency: 'mxn',
+      dueDate: '2026-08-20T10:00:00.000Z',
+    },
+  });
+  const callbackResponse = await app.inject({
+    method: 'POST',
+    url: '/operator/references/backend-provider-1/callback',
+    payload: { status: 'PAID' },
+  });
+
+  assert.equal(createResponse.statusCode, 200);
+  assert.equal(createResponse.json().ok, true);
+  assert.equal(
+    createResponse.json().reference.backendReferenceId,
+    'backend-provider-1',
+  );
+  assert.equal(
+    createResponse.json().reference.externalReference,
+    'PROVIDER-OP-001',
+  );
+  assert.equal(fetchCalls.length, 2);
+  assert.equal(fetchCalls[0]?.url, 'http://localhost:3000/api/provider/references');
+  assert.equal(
+    new Headers(fetchCalls[0]?.init?.headers).get('x-provider-secret'),
+    'provider-secret',
+  );
+  assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
+    externalReference: 'provider-op-001',
+    concept: 'Operator create flow',
+    amount: 1500,
+    currency: 'MXN',
+    dueDate: '2026-08-20T10:00:00.000Z',
+  });
+  assert.equal(callbackResponse.statusCode, 200);
+  assert.equal(
+    callbackResponse.json().reference.backendReferenceId,
+    'backend-provider-1',
+  );
+  assert.equal(
+    callbackResponse.json().reference.externalReference,
+    'PROVIDER-OP-001',
+  );
+});
+
+test('does not store a fake backend mapping when provider create fails', async (t) => {
+  const temp = createTempDbPath();
+  t.after(() => rmSync(temp.dir, { recursive: true, force: true }));
+
+  const app = await buildProviderStubApp({
+    env: {
+      port: 3002,
+      host: '127.0.0.1',
+      databasePath: temp.dbPath,
+      apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
+      backendCallbackUrl: 'http://localhost:3000/api/provider/events',
+      providerSharedSecret: 'provider-secret',
+    },
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ code: 'CONFLICT' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+  });
+  t.after(async () => app.close());
+
+  const createResponse = await app.inject({
+    method: 'POST',
+    url: '/operator/references',
+    payload: {
+      externalReference: 'provider-op-err-001',
+      concept: 'Operator create flow',
+      amount: '15.00',
+      currency: 'MXN',
+      dueDate: '2026-08-20T10:00:00.000Z',
+    },
+  });
+  const listResponse = await app.inject({
+    method: 'GET',
+    url: '/operator/references',
+  });
+
+  assert.equal(createResponse.statusCode, 200);
+  assert.equal(createResponse.json().ok, false);
+  assert.deepEqual(listResponse.json(), { items: [] });
+});
+
+test('rejects invalid operator create major-unit amounts before calling the backend', async (t) => {
+  const temp = createTempDbPath();
+  t.after(() => rmSync(temp.dir, { recursive: true, force: true }));
+
+  let backendCalls = 0;
+  const app = await buildProviderStubApp({
+    env: {
+      port: 3002,
+      host: '127.0.0.1',
+      databasePath: temp.dbPath,
+      apiKey: 'stub-key',
+      backendCreateUrl: 'http://localhost:3000/api/provider/references',
+      backendCallbackUrl: 'http://localhost:3000/api/provider/events',
+      providerSharedSecret: 'provider-secret',
+    },
+    fetchImpl: async () => {
+      backendCalls += 1;
+      return new Response(null, { status: 500 });
+    },
+  });
+  t.after(async () => app.close());
+
+  const createResponse = await app.inject({
+    method: 'POST',
+    url: '/operator/references',
+    payload: {
+      externalReference: 'provider-op-invalid-001',
+      concept: 'Operator create flow',
+      amount: '15.999',
+      currency: 'USD',
+      dueDate: '2026-08-20T10:00:00.000Z',
+    },
+  });
+
+  assert.equal(createResponse.statusCode, 400);
+  assert.equal(createResponse.json().ok, false);
+  assert.equal(createResponse.json().error.code, 'INVALID_OPERATOR_CREATE_AMOUNT');
+  assert.equal(backendCalls, 0);
 });

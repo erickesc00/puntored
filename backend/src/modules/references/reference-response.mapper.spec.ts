@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { ReferenceStatus } from '@prisma/client';
+import { ReferenceCreatorActorType, ReferenceStatus } from '@prisma/client';
 import {
   buildReferenceListWhere,
   decodeCursor,
@@ -22,6 +22,8 @@ describe('reference-response.mapper', () => {
           dueAt: new Date('2026-08-09T11:00:00.000Z'),
           status: ReferenceStatus.PENDING,
           version: 1,
+          creatorActorType: ReferenceCreatorActorType.USER,
+          creatorActorId: 'user-1',
           createdBy: 'user-1',
           createdAt: new Date('2026-08-09T10:00:00.000Z'),
           updatedAt: new Date('2026-08-09T10:00:00.000Z'),
@@ -29,6 +31,26 @@ describe('reference-response.mapper', () => {
         now,
       ).status,
     ).toBe(ReferenceStatus.EXPIRED);
+  });
+
+  it('falls back to creatorActorId when provider-owned rows have no user creator relation', () => {
+    expect(
+      serializeReference({
+        id: 'ref-provider-1',
+        externalReference: 'EXT-PROVIDER-001',
+        concept: 'Provider-created reference',
+        amount: BigInt(1000),
+        currency: 'MXN',
+        dueAt: new Date('2026-08-10T11:00:00.000Z'),
+        status: ReferenceStatus.PENDING,
+        version: 1,
+        creatorActorType: ReferenceCreatorActorType.PROVIDER,
+        creatorActorId: 'provider:puntored',
+        createdBy: null,
+        createdAt: new Date('2026-08-09T10:00:00.000Z'),
+        updatedAt: new Date('2026-08-09T10:00:00.000Z'),
+      }).createdBy,
+    ).toEqual({ id: 'provider:puntored' });
   });
 
   it('builds the expired list filter with persisted and effective overdue pending rows', () => {

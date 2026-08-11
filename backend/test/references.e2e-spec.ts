@@ -4,7 +4,7 @@
 
 import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../src/common/prisma/prisma.service';
-import { ReferenceStatus } from '@prisma/client';
+import { ReferenceCreatorActorType, ReferenceStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { DEMO_REFERENCE_FIXTURES, seedDatabase } from '../prisma/seed';
@@ -102,6 +102,8 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
         dueAt: overrides?.dueAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
         status: overrides?.status ?? ReferenceStatus.PENDING,
         version: overrides?.version ?? 1,
+        creatorActorType: ReferenceCreatorActorType.USER,
+        creatorActorId: operatorUser.id,
         createdBy: operatorUser.id,
         createdAt,
         updatedAt: overrides?.updatedAt ?? createdAt,
@@ -113,12 +115,110 @@ describe('Reference endpoints (e2e, real Prisma + MySQL)', () => {
     });
   };
 
+  const buildProviderCreatePayload = (
+    overrides?: Partial<Record<string, unknown>>,
+  ) => ({
+    externalReference: 'provider-create-001',
+    concept: 'Provider portal payment',
+    amount: 88000,
+    currency: 'MXN',
+    dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    ...overrides,
+  });
+
   const getMetricsText = async () => {
     const response = await request(getHttpServer())
       .get('/api/metrics')
       .expect(200);
     return response.text;
   };
+
+  const providerSecret =
+    process.env.PROVIDER_SHARED_SECRET ?? 'test-provider-secret-1234';
+
+  it('creates provider-originated references without changing the internal create path', async () => {
+    const response = await request(getHttpServer())
+      .post('/api/provider/references')
+      .set('x-provider-secret', providerSecret)
+      .send(buildProviderCreatePayload())
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      externalReference: 'PROVIDER-CREATE-001',
+      creatorActorType: ReferenceCreatorActorType.PROVIDER,
+      creatorActorId: 'provider:puntored',
+      status: ReferenceStatus.PENDING,
+    });
+
+    const persistedReference = await prisma.paymentReference.findUniqueOrThrow({
+      where: { id: response.body.id as string },
+    });
+
+    expect(persistedReference.creatorActorType).toBe(
+      ReferenceCreatorActorType.PROVIDER,
+    );
+    expect(persistedReference.creatorActorId).toBe('provider:puntored');
+    expect(persistedReference.createdBy).toBeNull();
+  });
+
+  it('replays provider creates for the same normalized immutable payload and returns the original mapping', async () => {
+    const payload = buildProviderCreatePayload({
+      externalReference: 'provider-replay-001',
+      concept: '  Provider replay concept  ',
+    });
+
+    const firstResponse = await request(getHttpServer())
+      .post('/api/provider/references')
+      .set('x-provider-secret', providerSecret)
+      .send(payload)
+      .expect(201);
+
+    const replayResponse = await request(getHttpServer())
+      .post('/api/provider/references')
+      .set('x-provider-secret', providerSecret)
+      .send({
+        ...payload,
+        externalReference: ' provider-replay-001 ',
+        concept: 'Provider   replay   concept',
+      })
+      .expect(200);
+
+    expect(replayResponse.body).toMatchObject(firstResponse.body);
+    expect(await prisma.paymentReference.count()).toBe(1);
+  });
+
+  it('rejects provider creates that reuse an external reference with conflicting immutable data', async () => {
+    await request(getHttpServer())
+      .post('/api/provider/references')
+      .set('x-provider-secret', providerSecret)
+      .send(
+        buildProviderCreatePayload({ externalReference: 'provider-conflict-001' }),
+      )
+      .expect(201);
+
+    const response = await request(getHttpServer())
+      .post('/api/provider/references')
+      .set('x-provider-secret', providerSecret)
+      .send(
+        buildProviderCreatePayload({
+          externalReference: 'provider-conflict-001',
+          amount: 99000,
+        }),
+      )
+      .expect(409);
+
+    expect(response.body.code).toBe(
+      'PROVIDER_EXTERNAL_REFERENCE_CONFLICT',
+    );
+    expect(await prisma.paymentReference.count()).toBe(1);
+  });
+
+  it('rejects provider create requests without provider auth', async () => {
+    await request(getHttpServer())
+      .post('/api/provider/references')
+      .send(buildProviderCreatePayload())
+      .expect(401);
+  });
 
   it('replays the same logical result for the same idempotency key and payload, with persisted evidence', async () => {
     const operatorCookie = await createSessionCookie(operatorUser.id);

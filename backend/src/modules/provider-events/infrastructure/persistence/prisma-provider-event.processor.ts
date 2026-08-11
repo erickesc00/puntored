@@ -278,7 +278,7 @@ export class PrismaProviderEventProcessor implements ProviderEventProcessor {
       createdAt: reference.createdAt.toISOString(),
       updatedAt: reference.updatedAt.toISOString(),
       createdBy: {
-        id: reference.createdBy,
+        id: reference.createdBy ?? reference.creatorActorId,
       },
     };
   }

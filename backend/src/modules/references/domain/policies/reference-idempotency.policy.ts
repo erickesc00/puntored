@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto';
 
 export interface CreateReferenceFingerprintPayload {
+  externalReference?: string;
   concept: string;
   amount: number;
   currency: string;
   dueDate: string;
+}
+
+export function normalizeExternalReference(value: string) {
+  return value.trim().toUpperCase();
 }
 
 export function buildDeterministicReferenceId(
@@ -32,6 +37,9 @@ export function normalizeCreateReferencePayload(
   payload: CreateReferenceFingerprintPayload,
 ): CreateReferenceFingerprintPayload {
   return {
+    ...(payload.externalReference
+      ? { externalReference: normalizeExternalReference(payload.externalReference) }
+      : {}),
     concept: normalizeConcept(payload.concept),
     amount: payload.amount,
     currency: normalizeCurrency(payload.currency),

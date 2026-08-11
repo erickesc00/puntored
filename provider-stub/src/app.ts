@@ -10,6 +10,7 @@ export interface ProviderStubEnv {
   host: string;
   databasePath: string;
   apiKey: string;
+  backendCreateUrl: string;
   backendCallbackUrl: string;
   providerSharedSecret: string;
 }
@@ -28,6 +29,8 @@ export function readProviderStubEnv(
     host: source.HOST ?? '0.0.0.0',
     databasePath: source.STUB_DB_PATH ?? './data/stub.db',
     apiKey: source.STUB_API_KEY ?? 'change-this-stub-api-key',
+    backendCreateUrl:
+      source.BACKEND_CREATE_URL ?? 'http://localhost:3000/api/provider/references',
     backendCallbackUrl:
       source.BACKEND_CALLBACK_URL ?? 'http://localhost:3000/api/provider/events',
     providerSharedSecret:
@@ -48,6 +51,7 @@ export async function buildProviderStubApp(
 
   await registerExternalReferenceRoutes(app, {
     apiKey: env.apiKey,
+    backendCreateUrl: env.backendCreateUrl,
     backendCallbackUrl: env.backendCallbackUrl,
     providerSharedSecret: env.providerSharedSecret,
     repository,

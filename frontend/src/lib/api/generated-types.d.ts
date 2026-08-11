@@ -144,6 +144,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a provider-originated payment reference */
+        post: operations["ProviderReferencesController_createProviderReference"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -268,6 +285,34 @@ export interface components {
         };
         CancelReferenceDto: {
             version: number;
+        };
+        ProviderCreateReferenceDto: {
+            concept: string;
+            amount: number;
+            /** @example MXN */
+            currency: components["schemas"]["SupportedCurrency"];
+            /** Format: date-time */
+            dueDate: string;
+            externalReference: string;
+        };
+        ProviderReferenceResponseDto: {
+            id: string;
+            externalReference: string;
+            concept: string;
+            amount: number;
+            currency: string;
+            /** Format: date-time */
+            dueDate: string;
+            /** @enum {string} */
+            status: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED";
+            version: number;
+            /** @enum {string} */
+            creatorActorType: "USER" | "PROVIDER";
+            creatorActorId: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
     };
     responses: never;
@@ -483,6 +528,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReferenceResponseDto"];
+                };
+            };
+        };
+    };
+    ProviderReferencesController_createProviderReference: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-provider-secret": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderCreateReferenceDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderReferenceResponseDto"];
+                };
+            };
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderReferenceResponseDto"];
                 };
             };
         };

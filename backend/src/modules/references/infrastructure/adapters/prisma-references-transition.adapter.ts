@@ -238,7 +238,9 @@ export class PrismaReferencesTransitionAdapter implements ReferencesTransitionPo
       dueAt: Date;
       status: ReferenceStatus;
       version: number;
-      createdBy: string;
+      creatorActorType: 'USER' | 'PROVIDER';
+      creatorActorId: string;
+      createdBy: string | null;
       createdAt: Date;
       updatedAt: Date;
     },

@@ -1,4 +1,8 @@
-import { AuditActorType, ReferenceStatus } from '@prisma/client';
+import {
+  AuditActorType,
+  ReferenceCreatorActorType,
+  ReferenceStatus,
+} from '@prisma/client';
 import { AUDIT_ACTION } from '../../../../shared/vocabulary/audit-actions';
 import { AUDIT_RESULT } from '../../../../shared/vocabulary/audit-results';
 import { IDEMPOTENCY_SCOPE } from '../../../../shared/vocabulary/idempotency-scopes';
@@ -98,6 +102,8 @@ describe('PrismaReferenceRepository', () => {
       dueAt: new Date('2026-08-09T13:00:00.000Z'),
       status: ReferenceStatus.CANCELLED,
       version: 5,
+      creatorActorType: ReferenceCreatorActorType.USER,
+      creatorActorId: 'operator-1',
       createdBy: 'operator-1',
       createdAt: new Date('2026-08-09T12:00:00.000Z'),
       updatedAt: new Date('2026-08-09T12:30:00.000Z'),
@@ -150,6 +156,76 @@ describe('PrismaReferenceRepository', () => {
         actorId: 'supervisor-1',
         result: AUDIT_RESULT.SUCCESS,
         correlationId: 'corr-1',
+      },
+    });
+  });
+
+  it('persists provider-owned references with nullable createdBy and provider audit actor', async () => {
+    const { repository, tx } = createRepository();
+    const createdReference = {
+      id: 'ref-provider-1',
+      externalReference: 'EXT-PROVIDER-001',
+      concept: 'Provider-created',
+      amount: BigInt(5000),
+      currency: 'MXN',
+      dueAt: new Date('2026-08-10T12:00:00.000Z'),
+      status: ReferenceStatus.PENDING,
+      version: 1,
+      creatorActorType: ReferenceCreatorActorType.PROVIDER,
+      creatorActorId: 'provider:puntored',
+      createdBy: null,
+      createdAt: new Date('2026-08-09T12:00:00.000Z'),
+      updatedAt: new Date('2026-08-09T12:00:00.000Z'),
+      creator: undefined,
+    };
+
+    tx.paymentReference.create.mockResolvedValue(createdReference);
+
+    await expect(
+      repository.persistProviderCreatedReference({
+        actorId: 'provider:puntored',
+        externalReference: 'EXT-PROVIDER-001',
+        concept: 'Provider-created',
+        amount: 5000,
+        currency: 'MXN',
+        dueAt: new Date('2026-08-10T12:00:00.000Z'),
+        correlationId: 'corr-provider-1',
+      }),
+    ).resolves.toEqual(createdReference);
+
+    expect(tx.paymentReference.create).toHaveBeenCalledWith({
+      data: {
+        externalReference: 'EXT-PROVIDER-001',
+        concept: 'Provider-created',
+        amount: BigInt(5000),
+        currency: 'MXN',
+        dueAt: new Date('2026-08-10T12:00:00.000Z'),
+        creatorActorType: ReferenceCreatorActorType.PROVIDER,
+        creatorActorId: 'provider:puntored',
+        createdBy: null,
+      },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            username: true,
+            role: true,
+          },
+        },
+      },
+    });
+    expect(tx.auditEvent.create).toHaveBeenCalledWith({
+      data: {
+        referenceId: 'ref-provider-1',
+        actorType: AuditActorType.PROVIDER,
+        actorId: 'provider:puntored',
+        action: AUDIT_ACTION.CREATE_REFERENCE,
+        result: AUDIT_RESULT.SUCCESS,
+        correlationId: 'corr-provider-1',
+        metadataJson: {
+          currency: 'MXN',
+          externalReference: 'EXT-PROVIDER-001',
+        },
       },
     });
   });

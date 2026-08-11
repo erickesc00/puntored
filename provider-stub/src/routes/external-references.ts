@@ -6,8 +6,13 @@ import {
   type ProviderReferenceStatus,
 } from '../db/sqlite';
 
+const supportedProviderCreateCurrencies = ['COP', 'MXN', 'USD', 'EUR'] as const;
+type SupportedProviderCreateCurrency =
+  (typeof supportedProviderCreateCurrencies)[number];
+
 export interface ProviderStubRouteConfig {
   apiKey: string;
+  backendCreateUrl: string;
   backendCallbackUrl: string;
   providerSharedSecret: string;
   repository: ProviderReferenceRepository;
@@ -23,6 +28,119 @@ export async function registerExternalReferenceRoutes(
   app.get('/operator', async (_request, reply) => {
     return reply.type('text/html; charset=utf-8').send(renderOperatorPage());
   });
+
+  app.post(
+    '/operator/references',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: [
+            'externalReference',
+            'concept',
+            'amount',
+            'currency',
+            'dueDate',
+          ],
+          properties: {
+            externalReference: { type: 'string', minLength: 1, maxLength: 30 },
+            concept: { type: 'string', minLength: 1, maxLength: 255 },
+            amount: { type: 'string', minLength: 1, maxLength: 32 },
+            currency: { type: 'string', minLength: 3, maxLength: 3 },
+            dueDate: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = request.body as {
+        externalReference: string;
+        concept: string;
+        amount: string;
+        currency: string;
+        dueDate: string;
+      };
+
+      const currency = body.currency.trim().toUpperCase();
+      const amount = parseMinorUnits(body.amount);
+
+      if (amount === null || amount < 1) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'INVALID_OPERATOR_CREATE_AMOUNT',
+            message:
+              'Amount must be a positive major-unit value with up to two decimals',
+          },
+        });
+      }
+
+      if (!isSupportedProviderCreateCurrency(currency)) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'INVALID_OPERATOR_CREATE_CURRENCY',
+            message: `Currency must be one of ${supportedProviderCreateCurrencies.join(', ')}`,
+          },
+        });
+      }
+
+      const normalizedPayload = {
+        externalReference: body.externalReference.trim(),
+        concept: body.concept.trim(),
+        amount,
+        currency,
+        dueDate: new Date(body.dueDate).toISOString(),
+      };
+
+      const backendResponse = await fetchImpl(config.backendCreateUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-provider-secret': config.providerSharedSecret,
+        },
+        body: JSON.stringify(normalizedPayload),
+      });
+      const backendBody = await safeReadBody(backendResponse);
+
+      if (!backendResponse.ok) {
+        return reply.code(200).send({
+          ok: false,
+          backend: {
+            statusCode: backendResponse.status,
+            body: backendBody,
+          },
+        });
+      }
+
+      const responseBody = backendBody as {
+        id: string;
+        externalReference: string;
+        concept: string;
+        amount: number;
+        currency: string;
+        dueDate: string;
+      };
+      const stored = config.repository.storeProviderCreated({
+        backendReferenceId: responseBody.id,
+        externalReference: responseBody.externalReference,
+        concept: responseBody.concept,
+        amount: responseBody.amount,
+        currency: responseBody.currency,
+        dueDate: responseBody.dueDate,
+      });
+
+      return reply.code(200).send({
+        ok: true,
+        reference: stored,
+        backend: {
+          statusCode: backendResponse.status,
+          body: backendBody,
+        },
+      });
+    },
+  );
 
   app.get('/operator/references', async () => ({
     items: config.repository.list(),
@@ -274,6 +392,13 @@ async function safeReadBody(response: Response) {
 }
 
 function renderOperatorPage() {
+  const currencyOptions = supportedProviderCreateCurrencies
+    .map((currency) => {
+      const selected = currency === 'MXN' ? ' selected' : '';
+      return `<option value="${currency}"${selected}>${currency}</option>`;
+    })
+    .join('');
+
   return String.raw`<!doctype html>
 <html lang="en">
   <head>
@@ -304,6 +429,7 @@ function renderOperatorPage() {
         color: #536076;
       }
       .toolbar,
+      .form-grid,
       .panel {
         background: #fff;
         border: 1px solid #d9e1ee;
@@ -337,10 +463,45 @@ function renderOperatorPage() {
         gap: 20px;
         margin-top: 20px;
       }
+      .form-grid {
+        margin-top: 20px;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 13px;
+        color: #445067;
+      }
+      input,
+      select {
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+        background: #fff;
+      }
+      .form-actions {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+      .inline-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
       .panel { overflow: hidden; }
       table {
         width: 100%;
         border-collapse: collapse;
+        table-layout: fixed;
       }
       th, td {
         padding: 14px 16px;
@@ -348,16 +509,25 @@ function renderOperatorPage() {
         text-align: left;
         vertical-align: top;
         font-size: 14px;
+        overflow-wrap: anywhere;
       }
       th {
         background: #f8fafc;
         color: #445067;
       }
       tr:last-child td { border-bottom: 0; }
+      .actions-cell {
+        width: 132px;
+      }
       .actions {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr;
         gap: 8px;
-        flex-wrap: wrap;
+      }
+      .actions button {
+        width: 100%;
+        min-width: 0;
+        white-space: normal;
       }
       .badge {
         display: inline-flex;
@@ -391,7 +561,10 @@ function renderOperatorPage() {
         padding: 14px;
         min-height: 260px;
       }
-      code { font-family: ui-monospace, SFMono-Regular, monospace; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        overflow-wrap: anywhere;
+      }
       @media (max-width: 900px) {
         .layout { grid-template-columns: 1fr; }
         .toolbar { flex-direction: column; align-items: stretch; }
@@ -411,6 +584,35 @@ function renderOperatorPage() {
         <button class="primary" id="refresh-button" type="button">Refresh list</button>
       </section>
 
+      <section class="panel form-grid">
+        <label>
+          External reference
+          <input id="create-external-reference" type="text" maxlength="30" placeholder="EXT-PROVIDER-001" />
+        </label>
+        <label>
+          Concept
+          <input id="create-concept" type="text" maxlength="255" placeholder="Utility payment" />
+        </label>
+        <label>
+          Amount
+          <input id="create-amount" type="number" min="0.01" step="0.01" value="1250.00" />
+        </label>
+        <label>
+          Currency
+          <select id="create-currency">${currencyOptions}</select>
+        </label>
+        <label>
+          Due date
+          <input id="create-due-date" type="datetime-local" />
+        </label>
+        <div class="form-actions">
+          <button class="secondary" id="generate-reference-button" type="button">Generate random reference</button>
+          <div class="inline-actions">
+            <button class="primary" id="create-button" type="button">Create provider reference</button>
+          </div>
+        </div>
+      </section>
+
       <section class="layout">
         <div class="panel">
           <table>
@@ -420,7 +622,7 @@ function renderOperatorPage() {
                 <th>External reference</th>
                 <th>Status</th>
                 <th>Details</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
               </tr>
             </thead>
             <tbody id="references-table-body">
@@ -430,6 +632,9 @@ function renderOperatorPage() {
         </div>
 
         <aside class="panel sidebar">
+          <h2>Create result</h2>
+          <pre id="create-result">Submit the form to create and store a provider-originated reference mapping.</pre>
+          <div style="height: 16px"></div>
           <h2>Last callback result</h2>
           <pre id="callback-result">Trigger a callback to inspect the backend response.</pre>
         </aside>
@@ -438,12 +643,27 @@ function renderOperatorPage() {
 
     <script>
       const tableBody = document.getElementById('references-table-body');
+      const createResult = document.getElementById('create-result');
       const callbackResult = document.getElementById('callback-result');
       const summary = document.getElementById('summary');
       const refreshButton = document.getElementById('refresh-button');
+      const createButton = document.getElementById('create-button');
+      const generateReferenceButton = document.getElementById('generate-reference-button');
+      const externalReferenceInput = document.getElementById('create-external-reference');
+      const conceptInput = document.getElementById('create-concept');
+      const amountInput = document.getElementById('create-amount');
+      const currencyInput = document.getElementById('create-currency');
+      const dueDateInput = document.getElementById('create-due-date');
       let busy = false;
 
       refreshButton.addEventListener('click', () => loadReferences());
+      createButton.addEventListener('click', () => createReference());
+      generateReferenceButton.addEventListener('click', () => {
+        externalReferenceInput.value = buildRandomExternalReference();
+      });
+
+      dueDateInput.value = toDatetimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000));
+      externalReferenceInput.value = buildRandomExternalReference();
 
       async function loadReferences() {
         setBusy(true);
@@ -459,6 +679,38 @@ function renderOperatorPage() {
           summary.textContent = 'Load failed';
           callbackResult.textContent = formatResult({
             action: 'LOAD_REFERENCES',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function createReference() {
+        setBusy(true, createButton);
+        createResult.textContent = 'Creating provider reference...';
+
+        try {
+          const response = await fetch('/operator/references', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              externalReference: externalReferenceInput.value,
+              concept: conceptInput.value,
+              amount: amountInput.value,
+              currency: currencyInput.value,
+              dueDate: new Date(dueDateInput.value).toISOString(),
+            }),
+          });
+          const payload = await response.json();
+          createResult.textContent = formatResult(payload);
+
+          if (payload.ok) {
+            await loadReferences();
+          }
+        } catch (error) {
+          createResult.textContent = formatResult({
+            action: 'CREATE_PROVIDER_REFERENCE',
             error: error instanceof Error ? error.message : String(error),
           });
         } finally {
@@ -484,7 +736,7 @@ function renderOperatorPage() {
             '<td><code>' + externalReference + '</code></td>',
             '<td><span class="badge">' + status + '</span></td>',
             '<td>' + detail + '</td>',
-            '<td>',
+            '<td class="actions-cell">',
             '<div class="actions">',
             '<button class="success" type="button" data-action="callback" data-reference-id="' + backendReferenceId + '" data-status="PAID">Send PAID</button>',
             '<button class="danger" type="button" data-action="callback" data-reference-id="' + backendReferenceId + '" data-status="CANCELLED">Send CANCELLED</button>',
@@ -548,6 +800,8 @@ function renderOperatorPage() {
       function setBusy(nextBusy, activeButton) {
         busy = nextBusy;
         refreshButton.disabled = nextBusy;
+        createButton.disabled = nextBusy;
+        generateReferenceButton.disabled = nextBusy;
 
         for (const button of document.querySelectorAll('button[data-action="callback"]')) {
           button.disabled = nextBusy;
@@ -571,8 +825,41 @@ function renderOperatorPage() {
           .replaceAll("'", '&#39;');
       }
 
+      function toDatetimeLocal(value) {
+        const pad = (part) => String(part).padStart(2, '0');
+        return value.getFullYear() + '-' +
+          pad(value.getMonth() + 1) + '-' +
+          pad(value.getDate()) + 'T' +
+          pad(value.getHours()) + ':' +
+          pad(value.getMinutes());
+      }
+
+      function buildRandomExternalReference() {
+        const suffix = Math.random().toString(36).slice(2, 10).toUpperCase();
+        return 'EXT-' + suffix;
+      }
+
       loadReferences();
     </script>
   </body>
 </html>`;
+}
+
+function parseMinorUnits(value: string) {
+  const normalized = value.trim().replace(',', '.');
+
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const [whole, decimal = ''] = normalized.split('.');
+  return Number(whole) * 100 + Number(decimal.padEnd(2, '0'));
+}
+
+function isSupportedProviderCreateCurrency(
+  value: string,
+): value is SupportedProviderCreateCurrency {
+  return supportedProviderCreateCurrencies.includes(
+    value as SupportedProviderCreateCurrency,
+  );
 }

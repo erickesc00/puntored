@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { ReferenceStatus } from '@prisma/client';
+import { ReferenceCreatorActorType, ReferenceStatus } from '@prisma/client';
 import { ERROR_CODE } from '../../shared/vocabulary/error-codes';
 import { getEffectiveReferenceStatus } from './reference.rules';
 import type { ReferenceRecord } from './application/ports/reference.repository';
@@ -31,9 +31,33 @@ export function serializeReference(
           role: reference.creator.role,
         }
       : {
-          id: reference.createdBy,
+          id: reference.createdBy ?? reference.creatorActorId,
         },
   };
+}
+
+export function serializeProviderReference(
+  reference: ReferenceRecord,
+  now = new Date(),
+) {
+  return {
+    id: reference.id,
+    externalReference: reference.externalReference,
+    concept: reference.concept,
+    amount: Number(reference.amount),
+    currency: reference.currency,
+    dueDate: reference.dueAt.toISOString(),
+    status: getEffectiveReferenceStatus(reference.status, reference.dueAt, now),
+    version: reference.version,
+    creatorActorType: reference.creatorActorType,
+    creatorActorId: reference.creatorActorId,
+    createdAt: reference.createdAt.toISOString(),
+    updatedAt: reference.updatedAt.toISOString(),
+  };
+}
+
+export function isProviderOwnedReference(reference: ReferenceRecord) {
+  return reference.creatorActorType === ReferenceCreatorActorType.PROVIDER;
 }
 
 export function buildReferenceListWhere(
