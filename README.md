@@ -59,8 +59,9 @@ The seed also creates one reference in each state: `DEMO-PENDING-001`, `DEMO-PAI
 1. Sign in as `operator` and create a reference. The response includes the provider-allocated `externalReference`.
 2. Find the reference in the URL-driven, cursor-paginated list and open its detail and audit history.
 3. Open the [provider operator UI](http://localhost:3002/operator) and send a `PAID` callback; reload the portal detail to see the transition and audit event.
-4. Create another reference, sign in as `supervisor`, and cancel it from its detail page.
-5. Attempt an invalid or competing terminal transition to observe the `409` conflict response without an invalid persisted state.
+4. Use the provider operator UI create form to create a provider-originated reference by sending an `externalReference` directly to the backend; verify that the stub stores the backend mapping and can later trigger callbacks for that reference.
+5. Create another reference, sign in as `supervisor`, and cancel it from its detail page.
+6. Attempt an invalid or competing terminal transition to observe the `409` conflict response without an invalid persisted state.
 
 To inspect HTTP behavior directly, use the [Swagger UI](http://localhost:3000/api/docs) or the versioned [`backend/openapi.yaml`](backend/openapi.yaml). Creating a reference requires an `Idempotency-Key` header; cancellation requires the current `version` from the reference response.
 
@@ -162,15 +163,15 @@ The local Playwright flows exercise operator creation through supervisor cancell
 | Prisma + MySQL | Supplies relational constraints, transactions, reproducible migrations, and typed access with low setup cost. | Couples persistence adapters to Prisma conventions and gives less query-level control than a query builder or raw SQL. |
 | Database-backed cookie sessions | Supports server-side expiry, revocation, logout, and role lookup without exposing a bearer token to browser JavaScript. | Adds a database lookup/refresh per protected request and assumes same-origin deployment for the current CSRF posture. |
 | Integer minor units with an explicit currency allowlist | Avoids binary floating-point errors and keeps API/UI validation consistent for `COP`, `MXN`, `USD`, and `EUR`. | The model assumes two fractional digits in presentation and therefore does not generalize to zero- or three-decimal currencies. |
-| Relational idempotency plus optimistic concurrency | Unique actor-scoped keys make creation replays durable; `version` predicates let one terminal transition win atomically across cancellation, provider events, and expiration. | Avoids another datastore, but adds retention, index growth, and contention concerns to MySQL. |
+| Relational idempotency plus optimistic concurrency | Internal portal creates use actor-scoped idempotency keys, while provider-originated creates use normalized `externalReference` replay/conflict semantics; `version` predicates let one terminal transition win atomically across cancellation, provider events, and expiration. | Avoids another datastore, but adds retention, index growth, and contention concerns to MySQL while requiring two clearly separated replay strategies. |
 
 ## Assumptions and boundaries
 
 - New references begin as `PENDING`; `PAID`, `CANCELLED`, and `EXPIRED` are terminal.
 - All persisted timestamps and list date boundaries use UTC.
 - Amounts cross API boundaries as positive integer minor units. Supported currencies are `COP`, `MXN`, `USD`, and `EUR`.
-- Idempotency keys are scoped by operation and authenticated actor. Records store a 72-hour expiry timestamp, but expiry cleanup and enforcement are not implemented yet.
-- Provider allocation is synchronous during creation. A failed allocation prevents a local-only reference from being committed; the provider stub uses the deterministic backend ID to make retries safe after a later local failure.
+- Internal portal creates use actor-scoped `Idempotency-Key` headers. Provider-originated creates do not use `Idempotency-Key`; they rely on normalized `externalReference` replay/conflict semantics instead. Idempotency records store a 72-hour expiry timestamp, but expiry cleanup and enforcement are not implemented yet.
+- The system supports two creation flows. Internal portal creates synchronously allocate an `externalReference` through the provider stub before the backend commit. Provider-originated creates are submitted by the provider stub directly to the backend with a caller-supplied `externalReference`, then persist the returned backend reference mapping locally for later callbacks.
 - A contradictory provider event does not override a local terminal state. It is rejected and audited for later reconciliation.
 - The frontend and API are deployed same-origin or behind a reverse proxy. Cross-origin cookie/CORS support is outside this delivery.
 - Audit, provider-event, session, and idempotency retention policies require production requirements before implementation.
